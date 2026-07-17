@@ -7,6 +7,9 @@ public sealed class TetrisPathPointRenderer
     private readonly Transform plane;
     private readonly float markerSize;
     private readonly float heightOffset;
+    private readonly GameObject dangerPrefab;
+    private readonly float dangerPrefabScale;
+    private readonly Vector3 dangerPrefabRotation;
     private readonly Transform root;
     private readonly Material startMaterial;
     private readonly Material endMaterial;
@@ -28,12 +31,18 @@ public sealed class TetrisPathPointRenderer
         Color endColor,
         Color dangerColor,
         float markerSize,
-        float heightOffset)
+        float heightOffset,
+        GameObject dangerPrefab,
+        float dangerPrefabScale,
+        Vector3 dangerPrefabRotation)
     {
         this.board = board;
         this.plane = plane;
         this.markerSize = markerSize;
         this.heightOffset = heightOffset;
+        this.dangerPrefab = dangerPrefab;
+        this.dangerPrefabScale = dangerPrefabScale;
+        this.dangerPrefabRotation = dangerPrefabRotation;
         root = new GameObject("Tetris Path Points").transform;
         startMaterial = CreateMaterial(startColor);
         endMaterial = CreateMaterial(endColor);
@@ -76,8 +85,23 @@ public sealed class TetrisPathPointRenderer
         dangerMarkers.Clear();
         for (int i = 0; i < dangerZones.Length; i++)
         {
-            dangerMarkers.Add(DrawMarker(null, dangerZones[i], dangerMaterial, "Danger Zone"));
+            dangerMarkers.Add(DrawDangerMarker(dangerZones[i]));
         }
+    }
+
+    private GameObject DrawDangerMarker(Vector2Int point)
+    {
+        if (dangerPrefab == null)
+        {
+            return DrawMarker(null, point, dangerMaterial, "Danger Zone");
+        }
+
+        GameObject marker = Object.Instantiate(dangerPrefab, root);
+        marker.name = "Danger Zone Effect";
+        marker.transform.position = board.GridPointToWorld(point) + plane.up * heightOffset;
+        marker.transform.rotation = plane.rotation * Quaternion.Euler(dangerPrefabRotation);
+        marker.transform.localScale = Vector3.one * dangerPrefabScale;
+        return marker;
     }
 
     private GameObject DrawMarker(GameObject marker, Vector2Int point, Material material, string markerName)

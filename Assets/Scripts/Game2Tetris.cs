@@ -12,6 +12,11 @@ public class Game2Tetris : MonoBehaviour
     [SerializeField, Min(0.1f)] private float cellSize = 1f;
     [SerializeField] private float blockHeight = 0.5f;
 
+    [Header("Camera")]
+    [SerializeField] private bool alignCameraToBoard = true;
+    [SerializeField, Min(0.1f)] private float cameraDistance = 20f;
+    [SerializeField, Min(0f)] private float cameraPadding = 1.5f;
+
     [Header("Block Prefabs")]
     [SerializeField] private GameObject blockI;
     [SerializeField] private GameObject blockO;
@@ -44,11 +49,14 @@ public class Game2Tetris : MonoBehaviour
     [SerializeField] private float orderLabelHeightOffset = 0.55f;
 
     [Header("Path Points")]
-    [SerializeField] private Vector2Int pathStartPoint = new Vector2Int(5, 20);
-    [SerializeField] private Vector2Int pathEndPoint = new Vector2Int(5, 0);
+    [SerializeField] private Vector2Int pathStartPoint = new Vector2Int(5, -1);
+    [SerializeField] private Vector2Int pathEndPoint = new Vector2Int(5, 20);
     [SerializeField] private Color pathStartColor = Color.blue;
     [SerializeField] private Color pathEndColor = Color.green;
     [SerializeField] private Color dangerZoneColor = new Color(1f, 0f, 0f, 0.45f);
+    [SerializeField] private GameObject dangerZonePrefab;
+    [SerializeField, Min(0.01f)] private float dangerZonePrefabScale = 1f;
+    [SerializeField] private Vector3 dangerZonePrefabRotation;
     [SerializeField, Min(0.05f)] private float pathPointSize = 0.8f;
     [SerializeField] private float pathPointHeightOffset = 0.08f;
     [SerializeField] private Color pathLineColor = Color.white;
@@ -114,6 +122,7 @@ public class Game2Tetris : MonoBehaviour
 
         CreateTetrominoes();
         board = new TetrisBoard(boardWidth, boardDepth, cellSize, blockHeight, plane);
+        AlignCameraToBoard();
         ghost = new TetrisGhost(ghostColor, ghostBehindOffset);
         orderLabelRenderer = new TetrisOrderLabelRenderer(orderLabelColor, orderLabelSize, orderLabelHeightOffset);
         SetupPath();
@@ -163,9 +172,8 @@ public class Game2Tetris : MonoBehaviour
 
     private void HandleInput(Keyboard keyboard)
     {
-        // The camera faces the board from the opposite side, so horizontal board input is reversed.
-        if (keyboard[moveLeftKey].wasPressedThisFrame) TryMove(Vector2Int.right);
-        if (keyboard[moveRightKey].wasPressedThisFrame) TryMove(Vector2Int.left);
+        if (keyboard[moveLeftKey].wasPressedThisFrame) TryMove(Vector2Int.left);
+        if (keyboard[moveRightKey].wasPressedThisFrame) TryMove(Vector2Int.right);
         if (keyboard[clockwiseKey].wasPressedThisFrame) TryRotate(1);
         if (keyboard[counterClockwiseKey].wasPressedThisFrame) TryRotate(-1);
 
@@ -188,7 +196,7 @@ public class Game2Tetris : MonoBehaviour
             return;
         }
 
-        if (!TryMove(Vector2Int.up))
+        if (!TryMove(Vector2Int.down))
         {
             LockPiece();
         }
@@ -217,6 +225,39 @@ public class Game2Tetris : MonoBehaviour
         return true;
     }
 
+    private void AlignCameraToBoard()
+    {
+        if (!alignCameraToBoard)
+        {
+            return;
+        }
+
+        Camera mainCamera = Camera.main;
+        if (mainCamera == null)
+        {
+            Debug.LogWarning("Game2Tetris: Main Camera was not found. Camera alignment skipped.", this);
+            return;
+        }
+
+        Vector3 boardCenter = GetBoardCenterWorld();
+        mainCamera.transform.position = boardCenter + plane.up * cameraDistance;
+        mainCamera.transform.rotation = Quaternion.LookRotation(-plane.up, plane.forward);
+
+        mainCamera.orthographic = true;
+        float boardWorldWidth = boardWidth * cellSize;
+        float boardWorldDepth = boardDepth * cellSize;
+        float sizeByDepth = boardWorldDepth * 0.5f + cameraPadding;
+        float sizeByWidth = (boardWorldWidth * 0.5f + cameraPadding) / mainCamera.aspect;
+        mainCamera.orthographicSize = Mathf.Max(sizeByDepth, sizeByWidth);
+    }
+
+    private Vector3 GetBoardCenterWorld()
+    {
+        Vector3 min = board.GridPointToWorld(new Vector2Int(0, 0));
+        Vector3 max = board.GridPointToWorld(new Vector2Int(boardWidth - 1, boardDepth - 1));
+        return (min + max) * 0.5f;
+    }
+
     private void CreateTetrominoes()
     {
         tetrominoes = new[]
@@ -236,7 +277,7 @@ public class Game2Tetris : MonoBehaviour
         {
             Type = type,
             LockedBlockId = nextLockedBlockId++,
-            Position = new Vector2Int(boardWidth / 2 - 1, data.GetSpawnRow()),
+            Position = new Vector2Int(boardWidth / 2 - 1, data.GetSpawnRowFromTop(boardDepth)),
             Rotation = 0,
             Root = Instantiate(data.Prefab)
         };
@@ -296,7 +337,7 @@ public class Game2Tetris : MonoBehaviour
     private void HardDrop()
     {
         int distance = 0;
-        while (TryMove(Vector2Int.up)) distance++;
+        while (TryMove(Vector2Int.down)) distance++;
         score += distance * 2;
         LockPiece();
     }
@@ -345,7 +386,10 @@ public class Game2Tetris : MonoBehaviour
             pathEndColor,
             dangerZoneColor,
             pathPointSize,
-            pathPointHeightOffset);
+            pathPointHeightOffset,
+            dangerZonePrefab,
+            dangerZonePrefabScale,
+            dangerZonePrefabRotation);
         dangerZones = ClampDangerZones(dangerZonePositions);
         pathPointRenderer.Draw(startPoint, endPoint, dangerZones);
         pathLineRenderer = new TetrisPathLineRenderer(
