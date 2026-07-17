@@ -9,12 +9,14 @@ public class test : MonoBehaviour
     {
         public string name;
         public Color color;
+        public int[] orderNumbers;
         public Vector2Int[] cells;
 
-        public BlockData(string name, Color color, params Vector2Int[] cells)
+        public BlockData(string name, Color color, int[] orderNumbers, params Vector2Int[] cells)
         {
             this.name = name;
             this.color = color;
+            this.orderNumbers = orderNumbers;
             this.cells = cells;
         }
     }
@@ -27,18 +29,34 @@ public class test : MonoBehaviour
         public GameObject[] views;
     }
 
+    private class BoardCell
+    {
+        public GameObject view;
+        public int blockId;
+        public int order;
+        public Vector2Int exitDirection;
+    }
+
     [Header("Board")]
     [SerializeField] private int width = 10;
     [SerializeField] private int height = 20;
     [SerializeField, Min(0.05f)] private float fallInterval = 0.7f;
     [SerializeField, Min(0.01f)] private float fastFallInterval = 0.05f;
 
+    [Header("Player")]
+    [SerializeField] private GameObject playerPrefab;
+    [SerializeField] private Color playerColor = Color.black;
+    [SerializeField, Range(0.1f, 1f)] private float playerScale = 0.95f;
+
+    [Header("Debug")]
+    [SerializeField] private bool showBlockOrderNumbers = true;
+
     [Header("Controls")]
     [SerializeField] private Key clockwiseRotationKey = Key.X;
     [SerializeField] private Key counterClockwiseRotationKey = Key.Z;
 
     private BlockData[] blockData;
-    private GameObject[,] board;
+    private BoardCell[,] board;
     private ActiveBlock activeBlock;
     private Transform boardRoot;
     private Sprite blockSprite;
@@ -48,14 +66,18 @@ public class test : MonoBehaviour
     private bool gameOver;
     private int[] blockBag;
     private int blockBagIndex;
+    private int nextLockedBlockId = 1;
+    private GameObject playerView;
+    private Vector2Int playerPosition;
 
     private void Start()
     {
         CreateBlockData();
         CreateBlockSprite();
         SetupBoard();
+        SetupPlayerStart();
         SetupCamera();
-        SpawnBlock();
+        SpawnBlock(false);
     }
 
     private void Update()
@@ -121,33 +143,33 @@ public class test : MonoBehaviour
     {
         blockData = new[]
         {
-            new BlockData("I", Color.cyan,
+            new BlockData("I", Color.cyan, new[] { 1, 2, 3, 4 },
                 new Vector2Int(-1, 0), new Vector2Int(0, 0),
                 new Vector2Int(1, 0), new Vector2Int(2, 0)),
-            new BlockData("O", Color.yellow,
-                new Vector2Int(0, 0), new Vector2Int(1, 0),
-                new Vector2Int(0, 1), new Vector2Int(1, 1)),
-            new BlockData("T", new Color(0.65f, 0.2f, 0.9f),
+            new BlockData("O", Color.yellow, new[] { 1, 2, 3, 4 },
+                new Vector2Int(0, 1), new Vector2Int(1, 1),
+                new Vector2Int(1, 0), new Vector2Int(0, 0)),
+            new BlockData("T", new Color(0.65f, 0.2f, 0.9f), new[] { 2, 3, 2, 4 },
                 new Vector2Int(-1, 0), new Vector2Int(0, 0),
                 new Vector2Int(1, 0), new Vector2Int(0, 1)),
-            new BlockData("S", Color.green,
-                new Vector2Int(-1, 0), new Vector2Int(0, 0),
-                new Vector2Int(0, 1), new Vector2Int(1, 1)),
-            new BlockData("Z", Color.red,
+            new BlockData("S", Color.green, new[] { 3, 4, 1, 2 },
+                new Vector2Int(0, 1), new Vector2Int(1, 1),
+                new Vector2Int(-1, 0), new Vector2Int(0, 0)),
+            new BlockData("Z", Color.red, new[] { 1, 2, 3, 4 },
                 new Vector2Int(-1, 1), new Vector2Int(0, 1),
                 new Vector2Int(0, 0), new Vector2Int(1, 0)),
-            new BlockData("J", Color.blue,
+            new BlockData("J", new Color(1f, 0.25f, 0.65f), new[] { 1, 2, 3, 4 },
                 new Vector2Int(-1, 1), new Vector2Int(-1, 0),
                 new Vector2Int(0, 0), new Vector2Int(1, 0)),
-            new BlockData("L", new Color(1f, 0.5f, 0f),
-                new Vector2Int(1, 1), new Vector2Int(-1, 0),
-                new Vector2Int(0, 0), new Vector2Int(1, 0))
+            new BlockData("L", new Color(1f, 0.5f, 0f), new[] { 1, 2, 3, 4 },
+                new Vector2Int(1, 1), new Vector2Int(1, 0),
+                new Vector2Int(0, 0), new Vector2Int(-1, 0))
         };
     }
 
     private void SetupBoard()
     {
-        board = new GameObject[width, height];
+        board = new BoardCell[width, height];
         boardRoot = new GameObject("Tetris Board").transform;
         boardRoot.SetParent(transform, false);
 
@@ -205,7 +227,44 @@ public class test : MonoBehaviour
         return view;
     }
 
-    private void SpawnBlock()
+    private void SetupPlayerStart()
+    {
+        playerPosition = new Vector2Int(width / 2, 0);
+
+        GameObject startBlock = CreateView(new Color(0.55f, 0.55f, 0.6f), "Player Start Block");
+        startBlock.transform.SetParent(boardRoot, false);
+        startBlock.transform.localPosition = new Vector3(playerPosition.x, playerPosition.y, 0f);
+        AddOrderLabel(startBlock, 1);
+
+        board[playerPosition.x, playerPosition.y] = new BoardCell
+        {
+            view = startBlock,
+            blockId = 0,
+            order = 1,
+            exitDirection = Vector2Int.up
+        };
+
+        playerView = playerPrefab != null
+            ? Instantiate(playerPrefab, boardRoot)
+            : CreateView(playerColor, "Player");
+
+        playerView.name = "Player";
+        playerView.transform.SetParent(boardRoot, false);
+        playerView.transform.localScale = Vector3.one * playerScale;
+
+        SpriteRenderer renderer = playerView.GetComponent<SpriteRenderer>();
+        if (renderer == null)
+        {
+            renderer = playerView.AddComponent<SpriteRenderer>();
+            renderer.sprite = blockSprite;
+        }
+
+        renderer.color = playerColor;
+        renderer.sortingOrder = 5;
+        UpdatePlayerView();
+    }
+
+    private void SpawnBlock(bool advancePlayer)
     {
         int index = DrawBlockFromBag();
         ActiveBlock next = new ActiveBlock
@@ -220,6 +279,7 @@ public class test : MonoBehaviour
         {
             next.views[i] = CreateView(blockData[index].color, blockData[index].name);
             next.views[i].transform.SetParent(boardRoot, false);
+            AddOrderLabel(next.views[i], blockData[index].orderNumbers[i]);
         }
 
         activeBlock = next;
@@ -227,6 +287,12 @@ public class test : MonoBehaviour
         nextFallTime = Time.time + fallInterval;
 
         if (!IsValid(activeBlock.position, activeBlock.rotation))
+        {
+            gameOver = true;
+            return;
+        }
+
+        if (advancePlayer && !AdvancePlayerTurn())
         {
             gameOver = true;
         }
@@ -275,19 +341,34 @@ public class test : MonoBehaviour
 
     private void TryRotate(int direction)
     {
-        if (blockData[activeBlock.dataIndex].name == "O")
-        {
-            return;
-        }
-
         int targetRotation = (activeBlock.rotation + direction + 4) % 4;
-        int[] wallKicks = direction > 0
-            ? new[] { 0, -1, 1, -2, 2 }
-            : new[] { 0, 1, -1, 2, -2 };
+        Vector2Int[] wallKicks = direction > 0
+            ? new[]
+            {
+                Vector2Int.zero,
+                Vector2Int.left,
+                Vector2Int.right,
+                Vector2Int.up,
+                new Vector2Int(-1, 1),
+                new Vector2Int(1, 1),
+                Vector2Int.left * 2,
+                Vector2Int.right * 2
+            }
+            : new[]
+            {
+                Vector2Int.zero,
+                Vector2Int.right,
+                Vector2Int.left,
+                Vector2Int.up,
+                new Vector2Int(1, 1),
+                new Vector2Int(-1, 1),
+                Vector2Int.right * 2,
+                Vector2Int.left * 2
+            };
 
-        foreach (int kick in wallKicks)
+        foreach (Vector2Int kick in wallKicks)
         {
-            Vector2Int target = activeBlock.position + new Vector2Int(kick, 0);
+            Vector2Int target = activeBlock.position + kick;
             if (!IsValid(target, targetRotation))
             {
                 continue;
@@ -335,17 +416,30 @@ public class test : MonoBehaviour
     private void LockBlock()
     {
         Vector2Int[] cells = blockData[activeBlock.dataIndex].cells;
+        Vector2Int exitDirection = GetExitDirection(cells, activeBlock.position, activeBlock.rotation);
+        int blockId = nextLockedBlockId++;
+
         for (int i = 0; i < cells.Length; i++)
         {
             Vector2Int cell = activeBlock.position + RotateCell(cells[i], activeBlock.rotation);
-            board[cell.x, cell.y] = activeBlock.views[i];
+            board[cell.x, cell.y] = new BoardCell
+            {
+                view = activeBlock.views[i],
+                blockId = blockId,
+                order = blockData[activeBlock.dataIndex].orderNumbers[i],
+                exitDirection = exitDirection
+            };
             activeBlock.views[i].name = "Locked Block";
         }
 
         int lineCount = ClearCompletedLines();
         score += GetLineScore(lineCount);
         clearedLines += lineCount;
-        SpawnBlock();
+
+        if (!gameOver)
+        {
+            SpawnBlock(true);
+        }
     }
 
     private int ClearCompletedLines()
@@ -387,8 +481,13 @@ public class test : MonoBehaviour
     {
         for (int x = 0; x < width; x++)
         {
-            Destroy(board[x, y]);
+            Destroy(board[x, y].view);
             board[x, y] = null;
+        }
+
+        if (playerPosition.y == y)
+        {
+            gameOver = true;
         }
     }
 
@@ -398,7 +497,7 @@ public class test : MonoBehaviour
         {
             for (int x = 0; x < width; x++)
             {
-                GameObject block = board[x, y];
+                BoardCell block = board[x, y];
                 if (block == null)
                 {
                     continue;
@@ -406,9 +505,147 @@ public class test : MonoBehaviour
 
                 board[x, y - 1] = block;
                 board[x, y] = null;
-                block.transform.localPosition += Vector3.down;
+                block.view.transform.localPosition += Vector3.down;
+
+                if (playerPosition.x == x && playerPosition.y == y)
+                {
+                    playerPosition = new Vector2Int(x, y - 1);
+                    UpdatePlayerView();
+                }
             }
         }
+    }
+
+    private bool AdvancePlayerTurn()
+    {
+        if (!IsInsideBoard(playerPosition))
+        {
+            return false;
+        }
+
+        BoardCell current = board[playerPosition.x, playerPosition.y];
+        if (current == null)
+        {
+            return false;
+        }
+
+        if (current.blockId == 0 && TryFindAdjacentOccupiedCell(out Vector2Int startTarget))
+        {
+            MovePlayerTo(startTarget);
+            return true;
+        }
+
+        if (TryFindNextCellInSameBlock(current, out Vector2Int sameBlockTarget))
+        {
+            MovePlayerTo(sameBlockTarget);
+            return true;
+        }
+
+        Vector2Int nextPosition = playerPosition + current.exitDirection;
+        if (!IsInsideBoard(nextPosition) || board[nextPosition.x, nextPosition.y] == null)
+        {
+            return false;
+        }
+
+        MovePlayerTo(nextPosition);
+        return true;
+    }
+
+    private bool TryFindAdjacentOccupiedCell(out Vector2Int target)
+    {
+        Vector2Int[] directions =
+        {
+            Vector2Int.up,
+            Vector2Int.right,
+            Vector2Int.left,
+            Vector2Int.down
+        };
+
+        for (int i = 0; i < directions.Length; i++)
+        {
+            Vector2Int candidate = playerPosition + directions[i];
+            if (IsInsideBoard(candidate) && board[candidate.x, candidate.y] != null)
+            {
+                target = candidate;
+                return true;
+            }
+        }
+
+        target = playerPosition;
+        return false;
+    }
+
+    private bool TryFindNextCellInSameBlock(BoardCell current, out Vector2Int target)
+    {
+        target = playerPosition;
+        int nextOrder = current.order + 1;
+        Vector2Int[] directions =
+        {
+            Vector2Int.up,
+            Vector2Int.right,
+            Vector2Int.left,
+            Vector2Int.down
+        };
+
+        for (int i = 0; i < directions.Length; i++)
+        {
+            Vector2Int candidatePosition = playerPosition + directions[i];
+            if (!IsInsideBoard(candidatePosition))
+            {
+                continue;
+            }
+
+            BoardCell candidate = board[candidatePosition.x, candidatePosition.y];
+            if (candidate == null ||
+                candidate.blockId != current.blockId ||
+                candidate.order != nextOrder)
+            {
+                continue;
+            }
+
+            target = candidatePosition;
+            return true;
+        }
+
+        return false;
+    }
+
+    private void MovePlayerTo(Vector2Int target)
+    {
+        playerPosition = target;
+        UpdatePlayerView();
+    }
+
+    private void UpdatePlayerView()
+    {
+        if (playerView == null)
+        {
+            return;
+        }
+
+        playerView.transform.localPosition = new Vector3(playerPosition.x, playerPosition.y, -0.5f);
+    }
+
+    private bool IsInsideBoard(Vector2Int position)
+    {
+        return position.x >= 0 && position.x < width && position.y >= 0 && position.y < height;
+    }
+
+    private Vector2Int GetExitDirection(Vector2Int[] cells, Vector2Int position, int rotation)
+    {
+        int[] orderNumbers = blockData[activeBlock.dataIndex].orderNumbers;
+        int thirdIndex = Array.IndexOf(orderNumbers, 3);
+        int fourthIndex = Array.IndexOf(orderNumbers, 4);
+
+        if (thirdIndex < 0 || fourthIndex < 0)
+        {
+            return Vector2Int.up;
+        }
+
+        Vector2Int third = position + RotateCell(cells[thirdIndex], rotation);
+        Vector2Int fourth = position + RotateCell(cells[fourthIndex], rotation);
+        Vector2Int direction = fourth - third;
+        return new Vector2Int(Math.Sign(direction.x), Math.Sign(direction.y));
     }
 
     private void UpdateActiveViews()
@@ -419,6 +656,29 @@ public class test : MonoBehaviour
             Vector2Int cell = activeBlock.position + RotateCell(cells[i], activeBlock.rotation);
             activeBlock.views[i].transform.localPosition = new Vector3(cell.x, cell.y, 0f);
         }
+    }
+
+    private void AddOrderLabel(GameObject parent, int order)
+    {
+        if (!showBlockOrderNumbers)
+        {
+            return;
+        }
+
+        GameObject label = new GameObject($"Order {order}");
+        label.transform.SetParent(parent.transform, false);
+        label.transform.localPosition = new Vector3(0f, 0f, -0.2f);
+
+        TextMesh text = label.AddComponent<TextMesh>();
+        text.text = order.ToString();
+        text.anchor = TextAnchor.MiddleCenter;
+        text.alignment = TextAlignment.Center;
+        text.characterSize = 0.35f;
+        text.fontSize = 48;
+        text.color = Color.black;
+
+        MeshRenderer renderer = label.GetComponent<MeshRenderer>();
+        renderer.sortingOrder = 4;
     }
 
     private static Vector2Int RotateCell(Vector2Int cell, int rotation)
@@ -456,8 +716,10 @@ public class test : MonoBehaviour
         gameOver = false;
         blockBag = null;
         blockBagIndex = 0;
+        nextLockedBlockId = 1;
         SetupBoard();
-        SpawnBlock();
+        SetupPlayerStart();
+        SpawnBlock(false);
     }
 
     private void OnGUI()
