@@ -578,6 +578,18 @@ MonoBehaviour:
   height: 20
   fallInterval: 0.7
   fastFallInterval: 0.05
+  enableTetrisCondition: 1
+  pathLineThickness: 0.3
+  pathLineColor: {r: 1, g: 1, b: 1, a: 1}
+  clearTargetX: -1
+  dangerZonePositions:
+  - {x: 4, y: 10}
+  - {x: 5, y: 10}
+  - {x: 6, y: 10}
+  dangerZoneColor: {r: 1, g: 0, b: 0, a: 0.45}
+  showBlockOrderNumbers: 1
+  clockwiseRotationKey: 15
+  counterClockwiseRotationKey: 18
 --- !u!4 &1493006558
 Transform:
   m_ObjectHideFlags: 0

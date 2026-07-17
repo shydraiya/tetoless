@@ -4,11 +4,13 @@ using UnityEngine.Rendering;
 public sealed class TetrisGhost
 {
     private readonly Color color;
+    private readonly float depthOffset;
     private GameObject root;
 
-    public TetrisGhost(Color color)
+    public TetrisGhost(Color color, float depthOffset)
     {
         this.color = color;
+        this.depthOffset = depthOffset;
     }
 
     public void Create(TetrominoData data, float cellSize)
@@ -44,7 +46,7 @@ public sealed class TetrisGhost
             landing += Vector2Int.up;
         }
 
-        root.transform.position = board.CellToWorld(landing);
+        root.transform.position = board.CellToWorld(landing) - plane.up * depthOffset;
         root.transform.rotation = plane.rotation * Quaternion.Euler(0f, piece.Rotation * 90f, 0f);
     }
 

@@ -34,6 +34,7 @@ public class Game2Tetris : MonoBehaviour
 
     [Header("Ghost Piece")]
     [SerializeField] private Color ghostColor = new Color(1f, 1f, 1f, 0.25f);
+    [SerializeField, Min(0f)] private float ghostBehindOffset = 0.05f;
 
     private TetrominoData[] tetrominoes;
     private ActiveTetrisPiece activePiece;
@@ -55,7 +56,7 @@ public class Game2Tetris : MonoBehaviour
 
         CreateTetrominoes();
         board = new TetrisBoard(boardWidth, boardDepth, cellSize, blockHeight, plane);
-        ghost = new TetrisGhost(ghostColor);
+        ghost = new TetrisGhost(ghostColor, ghostBehindOffset);
         sevenBag = new SevenBag();
         SpawnPiece();
     }
