@@ -1119,7 +1119,7 @@ public class test : MonoBehaviour
                 fontSize = 42,
                 alignment = TextAnchor.MiddleCenter
             };
-            GUI.Label(new Rect(0, Screen.height / 2f - 60f, Screen.width, 120f), "GAME CLEAR\nR ?ㅻ줈 ?ㅼ떆 ?쒖옉", clearStyle);
+            GUI.Label(new Rect(0, Screen.height / 2f - 60f, Screen.width, 120f), "GAME CLEAR\nR 키로 다시 시작", clearStyle);
             return;
         }
 

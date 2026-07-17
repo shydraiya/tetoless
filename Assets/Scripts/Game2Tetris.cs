@@ -1,0 +1,394 @@
+using UnityEngine;
+using UnityEngine.InputSystem;
+
+public class Game2Tetris : MonoBehaviour
+{
+    [Header("Board")]
+    [Tooltip("Connect the Plane from the Game2 scene.")]
+    [SerializeField] private Transform plane;
+    [SerializeField, Min(4)] private int boardWidth = 10;
+    [SerializeField, Min(4)] private int boardDepth = 20;
+    [SerializeField, Min(0.1f)] private float cellSize = 1f;
+    [SerializeField] private float blockHeight = 0.5f;
+
+    [Header("Block Prefabs")]
+    [SerializeField] private GameObject blockI;
+    [SerializeField] private GameObject blockO;
+    [SerializeField] private GameObject blockT;
+    [SerializeField] private GameObject blockS;
+    [SerializeField] private GameObject blockZ;
+    [SerializeField] private GameObject blockJ;
+    [SerializeField] private GameObject blockL;
+
+    [Header("Speed")]
+    [SerializeField, Min(0.05f)] private float fallInterval = 0.7f;
+    [SerializeField, Min(0.01f)] private float softDropInterval = 0.05f;
+
+    [Header("Controls")]
+    [SerializeField] private Key moveLeftKey = Key.LeftArrow;
+    [SerializeField] private Key moveRightKey = Key.RightArrow;
+    [SerializeField] private Key softDropKey = Key.DownArrow;
+    [SerializeField] private Key hardDropKey = Key.Space;
+    [SerializeField] private Key clockwiseKey = Key.X;
+    [SerializeField] private Key counterClockwiseKey = Key.Z;
+
+    [Header("Ghost Piece")]
+    [SerializeField] private Color ghostColor = new Color(1f, 1f, 1f, 0.25f);
+    [SerializeField, Min(0f)] private float ghostBehindOffset = 0.05f;
+
+    [Header("Order Labels")]
+    [SerializeField] private bool showOrderLabels = true;
+    [SerializeField] private Color orderLabelColor = Color.black;
+    [SerializeField, Min(0.01f)] private float orderLabelSize = 0.35f;
+    [SerializeField] private float orderLabelHeightOffset = 0.55f;
+
+    [Header("Path Points")]
+    [SerializeField] private Vector2Int pathStartPoint = new Vector2Int(5, 20);
+    [SerializeField] private Vector2Int pathEndPoint = new Vector2Int(5, 0);
+    [SerializeField] private Color pathStartColor = Color.blue;
+    [SerializeField] private Color pathEndColor = Color.green;
+    [SerializeField] private Color dangerZoneColor = new Color(1f, 0f, 0f, 0.45f);
+    [SerializeField, Min(0.05f)] private float pathPointSize = 0.8f;
+    [SerializeField] private float pathPointHeightOffset = 0.08f;
+    [SerializeField] private Color pathLineColor = Color.white;
+    [SerializeField, Min(0.01f)] private float pathLineThickness = 0.08f;
+    [SerializeField] private float pathLineHeightOffset = 0.16f;
+    [SerializeField] private Vector2Int[] dangerZonePositions =
+    {
+        new Vector2Int(4, 10),
+        new Vector2Int(5, 10),
+        new Vector2Int(6, 10)
+    };
+
+    private TetrominoData[] tetrominoes;
+    private ActiveTetrisPiece activePiece;
+    private TetrisBoard board;
+    private TetrisGhost ghost;
+    private TetrisOrderLabelRenderer orderLabelRenderer;
+    private TetrisPathPointRenderer pathPointRenderer;
+    private TetrisPathLineRenderer pathLineRenderer;
+    private TetrisPathRules pathRules;
+    private TetrisPathResult pathResult;
+    private Vector2Int[] dangerZones;
+    private SevenBag sevenBag;
+    private float nextFallTime;
+    private int score;
+    private int clearedLines;
+    private int nextLockedBlockId = 1;
+    private bool gameOver;
+    private bool gameClear;
+
+    private void Start()
+    {
+        if (!ValidateSetup())
+        {
+            enabled = false;
+            return;
+        }
+
+        CreateTetrominoes();
+        board = new TetrisBoard(boardWidth, boardDepth, cellSize, blockHeight, plane);
+        ghost = new TetrisGhost(ghostColor, ghostBehindOffset);
+        orderLabelRenderer = new TetrisOrderLabelRenderer(orderLabelColor, orderLabelSize, orderLabelHeightOffset);
+        SetupPath();
+        sevenBag = new SevenBag();
+        SpawnPiece();
+    }
+
+    private void Update()
+    {
+        Keyboard keyboard = Keyboard.current;
+        if (keyboard == null || gameOver || gameClear)
+        {
+            return;
+        }
+
+        HandleInput(keyboard);
+        HandleAutomaticFall(keyboard);
+    }
+
+    private void HandleInput(Keyboard keyboard)
+    {
+        // The camera faces the board from the opposite side, so horizontal board input is reversed.
+        if (keyboard[moveLeftKey].wasPressedThisFrame) TryMove(Vector2Int.right);
+        if (keyboard[moveRightKey].wasPressedThisFrame) TryMove(Vector2Int.left);
+        if (keyboard[clockwiseKey].wasPressedThisFrame) TryRotate(1);
+        if (keyboard[counterClockwiseKey].wasPressedThisFrame) TryRotate(-1);
+
+        if (keyboard[hardDropKey].wasPressedThisFrame)
+        {
+            HardDrop();
+        }
+    }
+
+    private void HandleAutomaticFall(Keyboard keyboard)
+    {
+        if (activePiece == null || keyboard[hardDropKey].wasPressedThisFrame)
+        {
+            return;
+        }
+
+        float interval = keyboard[softDropKey].isPressed ? softDropInterval : fallInterval;
+        if (Time.time < nextFallTime)
+        {
+            return;
+        }
+
+        if (!TryMove(Vector2Int.up))
+        {
+            LockPiece();
+        }
+
+        nextFallTime = Time.time + interval;
+    }
+
+    private bool ValidateSetup()
+    {
+        if (plane == null)
+        {
+            Debug.LogError("Game2Tetris: Connect the Game2 Plane in the Inspector.", this);
+            return false;
+        }
+
+        GameObject[] prefabs = { blockI, blockO, blockT, blockS, blockZ, blockJ, blockL };
+        foreach (GameObject prefab in prefabs)
+        {
+            if (prefab == null)
+            {
+                Debug.LogError("Game2Tetris: Connect all seven block prefabs in the Inspector.", this);
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private void CreateTetrominoes()
+    {
+        tetrominoes = new[]
+        {
+            TetrominoData.FromPrefab("I", blockI), TetrominoData.FromPrefab("O", blockO),
+            TetrominoData.FromPrefab("T", blockT), TetrominoData.FromPrefab("S", blockS),
+            TetrominoData.FromPrefab("Z", blockZ), TetrominoData.FromPrefab("J", blockJ),
+            TetrominoData.FromPrefab("L", blockL)
+        };
+    }
+
+    private void SpawnPiece()
+    {
+        int type = sevenBag.Draw();
+        TetrominoData data = tetrominoes[type];
+        activePiece = new ActiveTetrisPiece
+        {
+            Type = type,
+            LockedBlockId = nextLockedBlockId++,
+            Position = new Vector2Int(boardWidth / 2 - 1, data.GetSpawnRow()),
+            Rotation = 0,
+            Root = Instantiate(data.Prefab)
+        };
+
+        activePiece.Root.name = $"Active {data.Name}";
+        activePiece.Root.transform.localScale = Vector3.one * cellSize;
+        if (showOrderLabels)
+        {
+            orderLabelRenderer.AddLabels(data, activePiece.Root.transform, plane);
+        }
+
+        UpdatePieceView();
+        nextFallTime = Time.time + fallInterval;
+
+        if (!board.IsValid(data, activePiece.Position, activePiece.Rotation))
+        {
+            gameOver = true;
+            ghost.Hide();
+            return;
+        }
+
+        ghost.Create(data, cellSize);
+        UpdateGhost();
+    }
+
+    private bool TryMove(Vector2Int direction)
+    {
+        Vector2Int target = activePiece.Position + direction;
+        if (!board.IsValid(CurrentData, target, activePiece.Rotation))
+        {
+            return false;
+        }
+
+        activePiece.Position = target;
+        UpdatePieceView();
+        return true;
+    }
+
+    private void TryRotate(int direction)
+    {
+        if (CurrentData.Name == "O") return;
+
+        int rotation = (activePiece.Rotation + direction + 4) % 4;
+        int[] kicks = direction > 0 ? new[] { 0, -1, 1, -2, 2 } : new[] { 0, 1, -1, 2, -2 };
+        foreach (int kick in kicks)
+        {
+            Vector2Int target = activePiece.Position + new Vector2Int(kick, 0);
+            if (!board.IsValid(CurrentData, target, rotation)) continue;
+
+            activePiece.Position = target;
+            activePiece.Rotation = rotation;
+            UpdatePieceView();
+            return;
+        }
+    }
+
+    private void HardDrop()
+    {
+        int distance = 0;
+        while (TryMove(Vector2Int.up)) distance++;
+        score += distance * 2;
+        LockPiece();
+    }
+
+    private void LockPiece()
+    {
+        bool lockedOnDangerZone = IsActivePieceOnDangerZone();
+        if (!board.Lock(CurrentData, activePiece))
+        {
+            gameOver = true;
+            ghost.Hide();
+            return;
+        }
+
+        orderLabelRenderer?.Refresh();
+        ghost.Destroy();
+        activePiece = null;
+        System.Action<Transform> removeLabel = orderLabelRenderer == null ? null : orderLabelRenderer.RemoveLabelForTarget;
+        int lines = board.ClearFullLines(removeLabel);
+        orderLabelRenderer?.Refresh();
+        EvaluatePath();
+        clearedLines += lines;
+        score += GetLineScore(lines);
+        if (lockedOnDangerZone)
+        {
+            gameOver = true;
+            return;
+        }
+
+        if (gameClear)
+        {
+            return;
+        }
+
+        SpawnPiece();
+    }
+
+    private void SetupPath()
+    {
+        Vector2Int startPoint = ClampToPathPointArea(pathStartPoint);
+        Vector2Int endPoint = ClampToPathPointArea(pathEndPoint);
+        pathPointRenderer = new TetrisPathPointRenderer(
+            board,
+            plane,
+            pathStartColor,
+            pathEndColor,
+            dangerZoneColor,
+            pathPointSize,
+            pathPointHeightOffset);
+        dangerZones = ClampDangerZones(dangerZonePositions);
+        pathPointRenderer.Draw(startPoint, endPoint, dangerZones);
+        pathLineRenderer = new TetrisPathLineRenderer(
+            board,
+            plane,
+            pathLineColor,
+            pathLineThickness,
+            pathLineHeightOffset);
+        pathRules = new TetrisPathRules(board, boardWidth, boardDepth, startPoint, endPoint, dangerZones);
+        EvaluatePath();
+    }
+
+    private void EvaluatePath()
+    {
+        pathResult = pathRules?.Evaluate();
+        pathLineRenderer?.Draw(pathResult);
+        gameClear = pathResult != null && pathResult.ReachedEndPoint;
+    }
+
+    private Vector2Int ClampToPathPointArea(Vector2Int position)
+    {
+        return new Vector2Int(
+            Mathf.Clamp(position.x, -1, boardWidth),
+            Mathf.Clamp(position.y, -1, boardDepth));
+    }
+
+    private Vector2Int[] ClampDangerZones(Vector2Int[] positions)
+    {
+        Vector2Int[] clamped = new Vector2Int[positions.Length];
+        for (int i = 0; i < positions.Length; i++)
+        {
+            clamped[i] = new Vector2Int(
+                Mathf.Clamp(positions[i].x, 0, boardWidth - 1),
+                Mathf.Clamp(positions[i].y, 0, boardDepth - 1));
+        }
+
+        return clamped;
+    }
+
+    private bool IsActivePieceOnDangerZone()
+    {
+        if (dangerZones == null)
+        {
+            return false;
+        }
+
+        foreach (Vector2Int source in CurrentData.Cells)
+        {
+            Vector2Int cell = activePiece.Position + TetrominoData.RotateCell(source, activePiece.Rotation);
+            for (int i = 0; i < dangerZones.Length; i++)
+            {
+                if (cell == dangerZones[i])
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private void UpdatePieceView()
+    {
+        activePiece.Root.transform.position = board.CellToWorld(activePiece.Position);
+        activePiece.Root.transform.rotation = plane.rotation * Quaternion.Euler(0f, activePiece.Rotation * 90f, 0f);
+        orderLabelRenderer?.Refresh();
+        UpdateGhost();
+    }
+
+    private void UpdateGhost()
+    {
+        if (ghost != null && activePiece != null)
+        {
+            ghost.Update(board, CurrentData, activePiece, plane);
+        }
+    }
+
+    private TetrominoData CurrentData => tetrominoes[activePiece.Type];
+
+    private static int GetLineScore(int lines)
+    {
+        return lines switch { 1 => 100, 2 => 300, 3 => 500, 4 => 800, _ => 0 };
+    }
+
+    private void OnDestroy()
+    {
+        ghost?.Destroy();
+        orderLabelRenderer?.Destroy();
+        pathPointRenderer?.Destroy();
+        pathLineRenderer?.Destroy();
+    }
+
+    private void OnGUI()
+    {
+        GUI.Label(new Rect(20, 20, 400, 30), $"Score: {score}  Lines: {clearedLines}");
+        if (pathResult != null) GUI.Label(new Rect(20, 50, 400, 30), $"Path: {pathResult.ReachableCells.Count} cells");
+        if (gameClear) GUI.Label(new Rect(20, 80, 400, 30), "GAME CLEAR");
+        if (gameOver) GUI.Label(new Rect(20, 110, 400, 30), "GAME OVER");
+    }
+}
