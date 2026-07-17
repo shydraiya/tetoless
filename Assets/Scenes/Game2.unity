@@ -296,6 +296,20 @@ MonoBehaviour:
   clockwiseKey: 38
   counterClockwiseKey: 40
   ghostColor: {r: 0.4433962, g: 0.4433962, b: 0.4433962, a: 1}
+  ghostBehindOffset: 0.05
+  showOrderLabels: 1
+  orderLabelColor: {r: 0, g: 0, b: 0, a: 1}
+  orderLabelSize: 0.1
+  orderLabelHeightOffset: 0.55
+  pathStartPoint: {x: 5, y: 20}
+  pathEndPoint: {x: 5, y: 5}
+  pathStartColor: {r: 0, g: 0, b: 1, a: 1}
+  pathEndColor: {r: 0, g: 1, b: 0, a: 1}
+  pathPointSize: 0.8
+  pathPointHeightOffset: 1
+  pathLineColor: {r: 1, g: 1, b: 1, a: 1}
+  pathLineThickness: 0.5
+  pathLineHeightOffset: 2
 --- !u!4 &334700905
 Transform:
   m_ObjectHideFlags: 0
@@ -486,7 +500,7 @@ Camera:
   far clip plane: 100
   field of view: 60
   orthographic: 1
-  orthographic size: 10
+  orthographic size: 13
   m_Depth: -1
   m_CullingMask:
     serializedVersion: 2

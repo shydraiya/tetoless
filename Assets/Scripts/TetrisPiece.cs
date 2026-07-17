@@ -7,12 +7,14 @@ public struct TetrominoData
     public string Name { get; }
     public GameObject Prefab { get; }
     public Vector2Int[] Cells { get; }
+    public int[] OrderNumbers { get; }
 
-    private TetrominoData(string name, GameObject prefab, Vector2Int[] cells)
+    private TetrominoData(string name, GameObject prefab, Vector2Int[] cells, int[] orderNumbers)
     {
         Name = name;
         Prefab = prefab;
         Cells = cells;
+        OrderNumbers = orderNumbers;
     }
 
     public static TetrominoData FromPrefab(string name, GameObject prefab)
@@ -25,7 +27,7 @@ public struct TetrominoData
             cells[i] = new Vector2Int(Mathf.RoundToInt(position.x), Mathf.RoundToInt(position.z));
         }
 
-        return new TetrominoData(name, prefab, cells);
+        return new TetrominoData(name, prefab, cells, GetOrderNumbers(name));
     }
 
     public int GetSpawnRow()
@@ -59,7 +61,7 @@ public struct TetrominoData
 
         foreach (Transform child in children)
         {
-            if (child == root || child.GetComponent<Renderer>() == null)
+            if (child == root || child.GetComponent<Renderer>() == null || child.GetComponent<TextMesh>() != null)
             {
                 continue;
             }
@@ -73,11 +75,23 @@ public struct TetrominoData
         Array.Resize(ref cubes, count);
         return cubes;
     }
+
+    private static int[] GetOrderNumbers(string name)
+    {
+        return name switch
+        {
+            "O" => new[] { 2, 3, 4, 3 },
+            "T" => new[] { 2, 3, 2, 4 },
+            "S" => new[] { 1, 2, 3, 4 },
+            _ => new[] { 1, 2, 3, 4 }
+        };
+    }
 }
 
 public sealed class ActiveTetrisPiece
 {
     public int Type;
+    public int LockedBlockId;
     public Vector2Int Position;
     public int Rotation;
     public GameObject Root;
