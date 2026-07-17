@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -43,10 +44,24 @@ public class test : MonoBehaviour
     [SerializeField, Min(0.05f)] private float fallInterval = 0.7f;
     [SerializeField, Min(0.01f)] private float fastFallInterval = 0.05f;
 
-    [Header("Player")]
-    [SerializeField] private GameObject playerPrefab;
-    [SerializeField] private Color playerColor = Color.black;
-    [SerializeField, Range(0.1f, 1f)] private float playerScale = 0.95f;
+    [Header("Rules")]
+    [SerializeField] private bool enableTetrisCondition = true;
+
+    [Header("Path")]
+    [SerializeField, Range(0.05f, 1f)] private float pathLineThickness = 0.3f;
+    [SerializeField] private Color pathLineColor = Color.white;
+    [SerializeField, Tooltip("-1 keeps the clear target at the top center.")]
+    private int clearTargetX = -1;
+
+    [Header("Danger Zones")]
+    [SerializeField]
+    private Vector2Int[] dangerZonePositions =
+    {
+        new Vector2Int(4, 10),
+        new Vector2Int(5, 10),
+        new Vector2Int(6, 10)
+    };
+    [SerializeField] private Color dangerZoneColor = new Color(1f, 0f, 0f, 0.45f);
 
     [Header("Debug")]
     [SerializeField] private bool showBlockOrderNumbers = true;
@@ -67,8 +82,11 @@ public class test : MonoBehaviour
     private int[] blockBag;
     private int blockBagIndex;
     private int nextLockedBlockId = 1;
-    private GameObject playerView;
-    private Vector2Int playerPosition;
+    private bool gameClear;
+    private Transform pathRoot;
+    private GameObject clearTargetView;
+    private GameObject[] dangerZoneViews;
+    private Vector2Int startPosition;
 
     private void Start()
     {
@@ -76,13 +94,16 @@ public class test : MonoBehaviour
         CreateBlockSprite();
         SetupBoard();
         SetupPlayerStart();
+        UpdateClearTargetView();
+        UpdateDangerZoneViews();
         SetupCamera();
-        SpawnBlock(false);
+        RefreshPathLines();
+        SpawnBlock();
     }
 
     private void Update()
     {
-        if (gameOver)
+        if (gameOver || gameClear)
         {
             if (Keyboard.current != null && Keyboard.current.rKey.wasPressedThisFrame)
             {
@@ -146,7 +167,7 @@ public class test : MonoBehaviour
             new BlockData("I", Color.cyan, new[] { 1, 2, 3, 4 },
                 new Vector2Int(-1, 0), new Vector2Int(0, 0),
                 new Vector2Int(1, 0), new Vector2Int(2, 0)),
-            new BlockData("O", Color.yellow, new[] { 1, 2, 3, 4 },
+            new BlockData("O", Color.yellow, new[] { 2, 3, 4, 3 },
                 new Vector2Int(0, 1), new Vector2Int(1, 1),
                 new Vector2Int(1, 0), new Vector2Int(0, 0)),
             new BlockData("T", new Color(0.65f, 0.2f, 0.9f), new[] { 2, 3, 2, 4 },
@@ -229,42 +250,69 @@ public class test : MonoBehaviour
 
     private void SetupPlayerStart()
     {
-        playerPosition = new Vector2Int(width / 2, 0);
+        startPosition = new Vector2Int(width / 2, 0);
 
         GameObject startBlock = CreateView(new Color(0.55f, 0.55f, 0.6f), "Player Start Block");
         startBlock.transform.SetParent(boardRoot, false);
-        startBlock.transform.localPosition = new Vector3(playerPosition.x, playerPosition.y, 0f);
+        startBlock.transform.localPosition = new Vector3(startPosition.x, startPosition.y, 0f);
         AddOrderLabel(startBlock, 1);
 
-        board[playerPosition.x, playerPosition.y] = new BoardCell
+        board[startPosition.x, startPosition.y] = new BoardCell
         {
             view = startBlock,
             blockId = 0,
             order = 1,
             exitDirection = Vector2Int.up
         };
-
-        playerView = playerPrefab != null
-            ? Instantiate(playerPrefab, boardRoot)
-            : CreateView(playerColor, "Player");
-
-        playerView.name = "Player";
-        playerView.transform.SetParent(boardRoot, false);
-        playerView.transform.localScale = Vector3.one * playerScale;
-
-        SpriteRenderer renderer = playerView.GetComponent<SpriteRenderer>();
-        if (renderer == null)
-        {
-            renderer = playerView.AddComponent<SpriteRenderer>();
-            renderer.sprite = blockSprite;
-        }
-
-        renderer.color = playerColor;
-        renderer.sortingOrder = 5;
-        UpdatePlayerView();
     }
 
-    private void SpawnBlock(bool advancePlayer)
+    private void UpdateClearTargetView()
+    {
+        Vector2Int clearTarget = GetClearTargetPosition();
+        if (clearTargetView == null)
+        {
+            clearTargetView = CreateView(new Color(0f, 1f, 0f, 0.45f), "Clear Target");
+            clearTargetView.transform.SetParent(boardRoot, false);
+            clearTargetView.transform.localScale = Vector3.one * 0.98f;
+
+            SpriteRenderer renderer = clearTargetView.GetComponent<SpriteRenderer>();
+            renderer.sortingOrder = 2;
+        }
+
+        clearTargetView.transform.localPosition = new Vector3(clearTarget.x, clearTarget.y, -0.4f);
+    }
+
+    private void UpdateDangerZoneViews()
+    {
+        if (dangerZoneViews != null)
+        {
+            for (int i = 0; i < dangerZoneViews.Length; i++)
+            {
+                if (dangerZoneViews[i] != null)
+                {
+                    Destroy(dangerZoneViews[i]);
+                }
+            }
+        }
+
+        dangerZoneViews = new GameObject[dangerZonePositions.Length];
+        for (int i = 0; i < dangerZonePositions.Length; i++)
+        {
+            Vector2Int dangerZone = ClampToBoard(dangerZonePositions[i]);
+            dangerZonePositions[i] = dangerZone;
+
+            GameObject view = CreateView(dangerZoneColor, "Danger Zone");
+            view.transform.SetParent(boardRoot, false);
+            view.transform.localScale = Vector3.one * 0.98f;
+            view.transform.localPosition = new Vector3(dangerZone.x, dangerZone.y, -0.45f);
+
+            SpriteRenderer renderer = view.GetComponent<SpriteRenderer>();
+            renderer.sortingOrder = 2;
+            dangerZoneViews[i] = view;
+        }
+    }
+
+    private void SpawnBlock()
     {
         int index = DrawBlockFromBag();
         ActiveBlock next = new ActiveBlock
@@ -292,10 +340,6 @@ public class test : MonoBehaviour
             return;
         }
 
-        if (advancePlayer && !AdvancePlayerTurn())
-        {
-            gameOver = true;
-        }
     }
 
     private int DrawBlockFromBag()
@@ -432,13 +476,14 @@ public class test : MonoBehaviour
             activeBlock.views[i].name = "Locked Block";
         }
 
-        int lineCount = ClearCompletedLines();
+        int lineCount = enableTetrisCondition ? ClearCompletedLines() : 0;
         score += GetLineScore(lineCount);
         clearedLines += lineCount;
+        RefreshPathLines();
 
-        if (!gameOver)
+        if (!gameOver && !gameClear)
         {
-            SpawnBlock(true);
+            SpawnBlock();
         }
     }
 
@@ -485,10 +530,6 @@ public class test : MonoBehaviour
             board[x, y] = null;
         }
 
-        if (playerPosition.y == y)
-        {
-            gameOver = true;
-        }
     }
 
     private void MoveLinesDown(int startY)
@@ -507,52 +548,88 @@ public class test : MonoBehaviour
                 board[x, y] = null;
                 block.view.transform.localPosition += Vector3.down;
 
-                if (playerPosition.x == x && playerPosition.y == y)
+            }
+        }
+    }
+
+    private void RefreshPathLines()
+    {
+        if (pathRoot != null)
+        {
+            Destroy(pathRoot.gameObject);
+        }
+
+        pathRoot = new GameObject("Reachable Path Lines").transform;
+        pathRoot.SetParent(boardRoot, false);
+        gameClear = false;
+
+        if (!IsInsideBoard(startPosition) || board[startPosition.x, startPosition.y] == null)
+        {
+            return;
+        }
+
+        bool[,] visited = new bool[width, height];
+        Queue<Vector2Int> queue = new Queue<Vector2Int>();
+        HashSet<string> drawnEdges = new HashSet<string>();
+
+        visited[startPosition.x, startPosition.y] = true;
+        queue.Enqueue(startPosition);
+
+        Vector2Int clearTarget = GetClearTargetPosition();
+        if (startPosition == clearTarget)
+        {
+            gameClear = true;
+        }
+
+        while (queue.Count > 0)
+        {
+            Vector2Int current = queue.Dequeue();
+            List<Vector2Int> nextPositions = GetReachableNeighbors(current);
+
+            for (int i = 0; i < nextPositions.Count; i++)
+            {
+                Vector2Int next = nextPositions[i];
+                string edgeKey = GetEdgeKey(current, next);
+                if (drawnEdges.Add(edgeKey))
                 {
-                    playerPosition = new Vector2Int(x, y - 1);
-                    UpdatePlayerView();
+                    CreatePathLine(current, next);
+                }
+
+                if (IsDangerZone(next))
+                {
+                    gameOver = true;
+                }
+
+                if (visited[next.x, next.y])
+                {
+                    continue;
+                }
+
+                visited[next.x, next.y] = true;
+                queue.Enqueue(next);
+
+                if (next == clearTarget)
+                {
+                    gameClear = true;
                 }
             }
         }
     }
 
-    private bool AdvancePlayerTurn()
+    private List<Vector2Int> GetReachableNeighbors(Vector2Int position)
     {
-        if (!IsInsideBoard(playerPosition))
+        List<Vector2Int> neighbors = new List<Vector2Int>();
+        if (!IsInsideBoard(position))
         {
-            return false;
+            return neighbors;
         }
 
-        BoardCell current = board[playerPosition.x, playerPosition.y];
+        BoardCell current = board[position.x, position.y];
         if (current == null)
         {
-            return false;
+            return neighbors;
         }
 
-        if (current.blockId == 0 && TryFindAdjacentOccupiedCell(out Vector2Int startTarget))
-        {
-            MovePlayerTo(startTarget);
-            return true;
-        }
-
-        if (TryFindNextCellInSameBlock(current, out Vector2Int sameBlockTarget))
-        {
-            MovePlayerTo(sameBlockTarget);
-            return true;
-        }
-
-        Vector2Int nextPosition = playerPosition + current.exitDirection;
-        if (!IsInsideBoard(nextPosition) || board[nextPosition.x, nextPosition.y] == null)
-        {
-            return false;
-        }
-
-        MovePlayerTo(nextPosition);
-        return true;
-    }
-
-    private bool TryFindAdjacentOccupiedCell(out Vector2Int target)
-    {
         Vector2Int[] directions =
         {
             Vector2Int.up,
@@ -563,67 +640,93 @@ public class test : MonoBehaviour
 
         for (int i = 0; i < directions.Length; i++)
         {
-            Vector2Int candidate = playerPosition + directions[i];
-            if (IsInsideBoard(candidate) && board[candidate.x, candidate.y] != null)
-            {
-                target = candidate;
-                return true;
-            }
-        }
-
-        target = playerPosition;
-        return false;
-    }
-
-    private bool TryFindNextCellInSameBlock(BoardCell current, out Vector2Int target)
-    {
-        target = playerPosition;
-        int nextOrder = current.order + 1;
-        Vector2Int[] directions =
-        {
-            Vector2Int.up,
-            Vector2Int.right,
-            Vector2Int.left,
-            Vector2Int.down
-        };
-
-        for (int i = 0; i < directions.Length; i++)
-        {
-            Vector2Int candidatePosition = playerPosition + directions[i];
+            Vector2Int candidatePosition = position + directions[i];
             if (!IsInsideBoard(candidatePosition))
             {
                 continue;
             }
 
             BoardCell candidate = board[candidatePosition.x, candidatePosition.y];
-            if (candidate == null ||
-                candidate.blockId != current.blockId ||
-                candidate.order != nextOrder)
+            if (candidate == null)
             {
                 continue;
             }
 
-            target = candidatePosition;
-            return true;
+            if (current.blockId == 0)
+            {
+                neighbors.Add(candidatePosition);
+                continue;
+            }
+
+            if (current.order == 4)
+            {
+                if (candidate.blockId == current.blockId && candidate.order == 3)
+                {
+                    continue;
+                }
+
+                neighbors.Add(candidatePosition);
+                continue;
+            }
+
+            if (candidate.blockId == current.blockId && candidate.order == current.order + 1)
+            {
+                neighbors.Add(candidatePosition);
+            }
+        }
+
+        return neighbors;
+    }
+
+    private void CreatePathLine(Vector2Int from, Vector2Int to)
+    {
+        Vector3 start = new Vector3(from.x, from.y, -0.6f);
+        Vector3 end = new Vector3(to.x, to.y, -0.6f);
+        Vector3 delta = end - start;
+
+        GameObject line = new GameObject("Path Line");
+        line.transform.SetParent(pathRoot, false);
+        line.transform.localPosition = (start + end) * 0.5f;
+        line.transform.localRotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(delta.y, delta.x) * Mathf.Rad2Deg);
+        line.transform.localScale = new Vector3(delta.magnitude, pathLineThickness, 1f);
+
+        SpriteRenderer renderer = line.AddComponent<SpriteRenderer>();
+        renderer.sprite = blockSprite;
+        renderer.color = pathLineColor;
+        renderer.sortingOrder = 3;
+    }
+
+    private Vector2Int GetClearTargetPosition()
+    {
+        int targetX = clearTargetX < 0 ? width / 2 : Mathf.Clamp(clearTargetX, 0, width - 1);
+        return new Vector2Int(targetX, height - 3);
+    }
+
+    private bool IsDangerZone(Vector2Int position)
+    {
+        for (int i = 0; i < dangerZonePositions.Length; i++)
+        {
+            if (ClampToBoard(dangerZonePositions[i]) == position)
+            {
+                return true;
+            }
         }
 
         return false;
     }
 
-    private void MovePlayerTo(Vector2Int target)
+    private Vector2Int ClampToBoard(Vector2Int position)
     {
-        playerPosition = target;
-        UpdatePlayerView();
+        return new Vector2Int(
+            Mathf.Clamp(position.x, 0, width - 1),
+            Mathf.Clamp(position.y, 0, height - 1));
     }
 
-    private void UpdatePlayerView()
+    private static string GetEdgeKey(Vector2Int a, Vector2Int b)
     {
-        if (playerView == null)
-        {
-            return;
-        }
-
-        playerView.transform.localPosition = new Vector3(playerPosition.x, playerPosition.y, -0.5f);
+        int aKey = a.y * 1000 + a.x;
+        int bKey = b.y * 1000 + b.x;
+        return aKey < bKey ? $"{aKey}:{bKey}" : $"{bKey}:{aKey}";
     }
 
     private bool IsInsideBoard(Vector2Int position)
@@ -714,12 +817,16 @@ public class test : MonoBehaviour
         score = 0;
         clearedLines = 0;
         gameOver = false;
+        gameClear = false;
         blockBag = null;
         blockBagIndex = 0;
         nextLockedBlockId = 1;
         SetupBoard();
         SetupPlayerStart();
-        SpawnBlock(false);
+        UpdateClearTargetView();
+        UpdateDangerZoneViews();
+        RefreshPathLines();
+        SpawnBlock();
     }
 
     private void OnGUI()
@@ -735,6 +842,17 @@ public class test : MonoBehaviour
             new Rect(20, 52, 850, 35),
             $"← → 이동 | {clockwiseRotationKey} 시계 회전 | {counterClockwiseRotationKey} 반시계 회전 | ↓ 빠르게 | Space 즉시 낙하",
             style);
+
+        if (!gameOver && gameClear)
+        {
+            GUIStyle clearStyle = new GUIStyle(style)
+            {
+                fontSize = 42,
+                alignment = TextAnchor.MiddleCenter
+            };
+            GUI.Label(new Rect(0, Screen.height / 2f - 60f, Screen.width, 120f), "GAME CLEAR\nR ?ㅻ줈 ?ㅼ떆 ?쒖옉", clearStyle);
+            return;
+        }
 
         if (!gameOver)
         {
