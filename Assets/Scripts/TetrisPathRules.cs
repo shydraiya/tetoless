@@ -8,14 +8,27 @@ public sealed class TetrisPathRules
     private readonly int depth;
     private readonly Vector2Int startPoint;
     private readonly Vector2Int endPoint;
+    private readonly HashSet<Vector2Int> dangerZones;
 
-    public TetrisPathRules(TetrisBoard board, int width, int depth, Vector2Int startPoint, Vector2Int endPoint)
+    public TetrisPathRules(
+        TetrisBoard board,
+        int width,
+        int depth,
+        Vector2Int startPoint,
+        Vector2Int endPoint,
+        IEnumerable<Vector2Int> dangerZones)
     {
         this.board = board;
         this.width = width;
         this.depth = depth;
         this.startPoint = ClampToPointArea(startPoint);
         this.endPoint = ClampToPointArea(endPoint);
+        this.dangerZones = new HashSet<Vector2Int>();
+
+        foreach (Vector2Int dangerZone in dangerZones)
+        {
+            this.dangerZones.Add(ClampToBoard(dangerZone));
+        }
     }
 
     public TetrisPathResult Evaluate()
@@ -70,7 +83,7 @@ public sealed class TetrisPathRules
         foreach (Vector2Int direction in Directions)
         {
             Vector2Int candidate = point + direction;
-            if (board.TryGetCell(candidate, out _))
+            if (!IsDangerZone(candidate) && board.TryGetCell(candidate, out _))
             {
                 cells.Add(candidate);
             }
@@ -90,6 +103,11 @@ public sealed class TetrisPathRules
         foreach (Vector2Int direction in Directions)
         {
             Vector2Int candidatePosition = position + direction;
+            if (IsDangerZone(candidatePosition))
+            {
+                continue;
+            }
+
             if (!board.TryGetCell(candidatePosition, out TetrisBoardCell candidate))
             {
                 continue;
@@ -125,6 +143,18 @@ public sealed class TetrisPathRules
         return new Vector2Int(
             Mathf.Clamp(position.x, -1, width),
             Mathf.Clamp(position.y, -1, depth));
+    }
+
+    private Vector2Int ClampToBoard(Vector2Int position)
+    {
+        return new Vector2Int(
+            Mathf.Clamp(position.x, 0, width - 1),
+            Mathf.Clamp(position.y, 0, depth - 1));
+    }
+
+    private bool IsDangerZone(Vector2Int position)
+    {
+        return dangerZones.Contains(position);
     }
 
     private static string GetEdgeKey(Vector2Int a, Vector2Int b)

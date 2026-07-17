@@ -9,14 +9,17 @@ public sealed class TetrisPathPointRenderer
     private readonly Transform root;
     private readonly Material startMaterial;
     private readonly Material endMaterial;
+    private readonly Material dangerMaterial;
     private GameObject startMarker;
     private GameObject endMarker;
+    private readonly System.Collections.Generic.List<GameObject> dangerMarkers = new System.Collections.Generic.List<GameObject>();
 
     public TetrisPathPointRenderer(
         TetrisBoard board,
         Transform plane,
         Color startColor,
         Color endColor,
+        Color dangerColor,
         float markerSize,
         float heightOffset)
     {
@@ -27,12 +30,14 @@ public sealed class TetrisPathPointRenderer
         root = new GameObject("Tetris Path Points").transform;
         startMaterial = CreateMaterial(startColor);
         endMaterial = CreateMaterial(endColor);
+        dangerMaterial = CreateMaterial(dangerColor);
     }
 
-    public void Draw(Vector2Int startPoint, Vector2Int endPoint)
+    public void Draw(Vector2Int startPoint, Vector2Int endPoint, Vector2Int[] dangerZones)
     {
         startMarker = DrawMarker(startMarker, startPoint, startMaterial, "Start Point");
         endMarker = DrawMarker(endMarker, endPoint, endMaterial, "End Point");
+        DrawDangerZones(dangerZones);
     }
 
     public void Destroy()
@@ -44,6 +49,24 @@ public sealed class TetrisPathPointRenderer
 
         Object.Destroy(startMaterial);
         Object.Destroy(endMaterial);
+        Object.Destroy(dangerMaterial);
+    }
+
+    private void DrawDangerZones(Vector2Int[] dangerZones)
+    {
+        for (int i = 0; i < dangerMarkers.Count; i++)
+        {
+            if (dangerMarkers[i] != null)
+            {
+                Object.Destroy(dangerMarkers[i]);
+            }
+        }
+
+        dangerMarkers.Clear();
+        for (int i = 0; i < dangerZones.Length; i++)
+        {
+            dangerMarkers.Add(DrawMarker(null, dangerZones[i], dangerMaterial, "Danger Zone"));
+        }
     }
 
     private GameObject DrawMarker(GameObject marker, Vector2Int point, Material material, string markerName)
@@ -68,8 +91,13 @@ public sealed class TetrisPathPointRenderer
 
     private Material CreateMaterial(Color color)
     {
-        Material material = new Material(Shader.Find("Standard"));
+        Material material = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
         material.color = color;
+        if (material.HasProperty("_BaseColor"))
+        {
+            material.SetColor("_BaseColor", color);
+        }
+
         return material;
     }
 }

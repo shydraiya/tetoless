@@ -18,11 +18,24 @@ public sealed class TetrisPathLineRenderer
         this.color = color;
         this.thickness = thickness;
         this.heightOffset = heightOffset;
-        material = new Material(Shader.Find("Unlit/Color"));
+        material = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
         material.color = color;
+        if (material.HasProperty("_BaseColor"))
+        {
+            material.SetColor("_BaseColor", color);
+        }
+
         material.renderQueue = 5000;
-        material.SetInt("_ZTest", (int)UnityEngine.Rendering.CompareFunction.Always);
-        material.SetInt("_ZWrite", 0);
+        if (material.HasProperty("_ZTest"))
+        {
+            material.SetInt("_ZTest", (int)UnityEngine.Rendering.CompareFunction.Always);
+        }
+
+        if (material.HasProperty("_ZWrite"))
+        {
+            material.SetInt("_ZWrite", 0);
+        }
+
         lineMesh = CreateLineMesh();
         root = new GameObject("Tetris Path Lines").transform;
     }

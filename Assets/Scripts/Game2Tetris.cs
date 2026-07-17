@@ -47,11 +47,18 @@ public class Game2Tetris : MonoBehaviour
     [SerializeField] private Vector2Int pathEndPoint = new Vector2Int(5, 0);
     [SerializeField] private Color pathStartColor = Color.blue;
     [SerializeField] private Color pathEndColor = Color.green;
+    [SerializeField] private Color dangerZoneColor = new Color(1f, 0f, 0f, 0.45f);
     [SerializeField, Min(0.05f)] private float pathPointSize = 0.8f;
     [SerializeField] private float pathPointHeightOffset = 0.08f;
     [SerializeField] private Color pathLineColor = Color.white;
     [SerializeField, Min(0.01f)] private float pathLineThickness = 0.08f;
     [SerializeField] private float pathLineHeightOffset = 0.16f;
+    [SerializeField] private Vector2Int[] dangerZonePositions =
+    {
+        new Vector2Int(4, 10),
+        new Vector2Int(5, 10),
+        new Vector2Int(6, 10)
+    };
 
     private TetrominoData[] tetrominoes;
     private ActiveTetrisPiece activePiece;
@@ -62,12 +69,14 @@ public class Game2Tetris : MonoBehaviour
     private TetrisPathLineRenderer pathLineRenderer;
     private TetrisPathRules pathRules;
     private TetrisPathResult pathResult;
+    private Vector2Int[] dangerZones;
     private SevenBag sevenBag;
     private float nextFallTime;
     private int score;
     private int clearedLines;
     private int nextLockedBlockId = 1;
     private bool gameOver;
+    private bool gameClear;
 
     private void Start()
     {
@@ -89,7 +98,7 @@ public class Game2Tetris : MonoBehaviour
     private void Update()
     {
         Keyboard keyboard = Keyboard.current;
-        if (keyboard == null || gameOver)
+        if (keyboard == null || gameOver || gameClear)
         {
             return;
         }
@@ -240,6 +249,7 @@ public class Game2Tetris : MonoBehaviour
 
     private void LockPiece()
     {
+        bool lockedOnDangerZone = IsActivePieceOnDangerZone();
         if (!board.Lock(CurrentData, activePiece))
         {
             gameOver = true;
@@ -256,6 +266,17 @@ public class Game2Tetris : MonoBehaviour
         EvaluatePath();
         clearedLines += lines;
         score += GetLineScore(lines);
+        if (lockedOnDangerZone)
+        {
+            gameOver = true;
+            return;
+        }
+
+        if (gameClear)
+        {
+            return;
+        }
+
         SpawnPiece();
     }
 
@@ -268,16 +289,18 @@ public class Game2Tetris : MonoBehaviour
             plane,
             pathStartColor,
             pathEndColor,
+            dangerZoneColor,
             pathPointSize,
             pathPointHeightOffset);
-        pathPointRenderer.Draw(startPoint, endPoint);
+        dangerZones = ClampDangerZones(dangerZonePositions);
+        pathPointRenderer.Draw(startPoint, endPoint, dangerZones);
         pathLineRenderer = new TetrisPathLineRenderer(
             board,
             plane,
             pathLineColor,
             pathLineThickness,
             pathLineHeightOffset);
-        pathRules = new TetrisPathRules(board, boardWidth, boardDepth, startPoint, endPoint);
+        pathRules = new TetrisPathRules(board, boardWidth, boardDepth, startPoint, endPoint, dangerZones);
         EvaluatePath();
     }
 
@@ -285,6 +308,7 @@ public class Game2Tetris : MonoBehaviour
     {
         pathResult = pathRules?.Evaluate();
         pathLineRenderer?.Draw(pathResult);
+        gameClear = pathResult != null && pathResult.ReachedEndPoint;
     }
 
     private Vector2Int ClampToPathPointArea(Vector2Int position)
@@ -292,6 +316,41 @@ public class Game2Tetris : MonoBehaviour
         return new Vector2Int(
             Mathf.Clamp(position.x, -1, boardWidth),
             Mathf.Clamp(position.y, -1, boardDepth));
+    }
+
+    private Vector2Int[] ClampDangerZones(Vector2Int[] positions)
+    {
+        Vector2Int[] clamped = new Vector2Int[positions.Length];
+        for (int i = 0; i < positions.Length; i++)
+        {
+            clamped[i] = new Vector2Int(
+                Mathf.Clamp(positions[i].x, 0, boardWidth - 1),
+                Mathf.Clamp(positions[i].y, 0, boardDepth - 1));
+        }
+
+        return clamped;
+    }
+
+    private bool IsActivePieceOnDangerZone()
+    {
+        if (dangerZones == null)
+        {
+            return false;
+        }
+
+        foreach (Vector2Int source in CurrentData.Cells)
+        {
+            Vector2Int cell = activePiece.Position + TetrominoData.RotateCell(source, activePiece.Rotation);
+            for (int i = 0; i < dangerZones.Length; i++)
+            {
+                if (cell == dangerZones[i])
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private void UpdatePieceView()
@@ -329,6 +388,7 @@ public class Game2Tetris : MonoBehaviour
     {
         GUI.Label(new Rect(20, 20, 400, 30), $"Score: {score}  Lines: {clearedLines}");
         if (pathResult != null) GUI.Label(new Rect(20, 50, 400, 30), $"Path: {pathResult.ReachableCells.Count} cells");
-        if (gameOver) GUI.Label(new Rect(20, 80, 400, 30), "GAME OVER");
+        if (gameClear) GUI.Label(new Rect(20, 80, 400, 30), "GAME CLEAR");
+        if (gameOver) GUI.Label(new Rect(20, 110, 400, 30), "GAME OVER");
     }
 }
