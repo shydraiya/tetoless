@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -60,6 +61,23 @@ public class Game2Tetris : MonoBehaviour
         new Vector2Int(6, 10)
     };
 
+    [Header("Stage Presentation")]
+    [SerializeField] private bool playMapIntro = true;
+    [SerializeField, Min(0.05f)] private float mapIntroInterval = 1f;
+    [SerializeField] private GameObject mapRevealEffectPrefab;
+    [SerializeField, Min(0.1f)] private float mapRevealEffectLifetime = 3f;
+    [SerializeField] private GameObject stageBackgroundPrefab;
+    [SerializeField] private bool fitBackgroundToCamera = true;
+    [SerializeField] private GameObject stageFramePrefab;
+    [SerializeField] private Color stageFrameColor = new Color(0.18f, 0.18f, 0.22f, 1f);
+    [SerializeField] private float stageFrameHeightOffset = 0.04f;
+    [SerializeField, Min(0.01f)] private float stageFrameScale = 1f;
+    [SerializeField, Min(0.001f)] private float stageFrameThickness = 0.03f;
+
+    [Header("Stage Clear")]
+    [SerializeField] private string nextStageSceneName;
+    [SerializeField, Min(0f)] private float nextStageDelay = 1f;
+
     private TetrominoData[] tetrominoes;
     private ActiveTetrisPiece activePiece;
     private TetrisBoard board;
@@ -70,6 +88,7 @@ public class Game2Tetris : MonoBehaviour
     private TetrisPathRules pathRules;
     private TetrisPathResult pathResult;
     private Vector2Int[] dangerZones;
+    private Game2StagePresentation stagePresentation;
     private SevenBag sevenBag;
     private float nextFallTime;
     private int score;
@@ -77,13 +96,20 @@ public class Game2Tetris : MonoBehaviour
     private int nextLockedBlockId = 1;
     private bool gameOver;
     private bool gameClear;
+    private bool mapIntroPlaying;
+    private bool loadingNextStage;
 
     private void Start()
+    {
+        StartCoroutine(BeginGame());
+    }
+
+    private IEnumerator BeginGame()
     {
         if (!ValidateSetup())
         {
             enabled = false;
-            return;
+            yield break;
         }
 
         CreateTetrominoes();
@@ -91,14 +117,42 @@ public class Game2Tetris : MonoBehaviour
         ghost = new TetrisGhost(ghostColor, ghostBehindOffset);
         orderLabelRenderer = new TetrisOrderLabelRenderer(orderLabelColor, orderLabelSize, orderLabelHeightOffset);
         SetupPath();
+        stagePresentation = new Game2StagePresentation(
+            transform,
+            board,
+            plane,
+            boardWidth,
+            boardDepth,
+            stageBackgroundPrefab,
+            fitBackgroundToCamera,
+            stageFramePrefab,
+            stageFrameColor,
+            Mathf.Max(0.02f, Mathf.Min(stageFrameHeightOffset, pathPointHeightOffset - 0.01f)),
+            cellSize * stageFrameScale,
+            stageFrameThickness,
+            mapRevealEffectPrefab,
+            mapRevealEffectLifetime);
+        stagePresentation.SetupFrame();
+        stagePresentation.SetupBackground();
         sevenBag = new SevenBag();
+        mapIntroPlaying = true;
+        yield return stagePresentation.PlayMapIntro(
+            playMapIntro,
+            mapIntroInterval,
+            stagePresentation.LeftWallViews,
+            stagePresentation.RightWallViews,
+            stagePresentation.FloorViews,
+            pathPointRenderer.StartMarkers,
+            pathPointRenderer.EndMarkers,
+            pathPointRenderer.DangerMarkers);
+        mapIntroPlaying = false;
         SpawnPiece();
     }
 
     private void Update()
     {
         Keyboard keyboard = Keyboard.current;
-        if (keyboard == null || gameOver || gameClear)
+        if (keyboard == null || mapIntroPlaying || gameOver || gameClear)
         {
             return;
         }
@@ -223,7 +277,7 @@ public class Game2Tetris : MonoBehaviour
 
     private void TryRotate(int direction)
     {
-        if (CurrentData.Name == "O") return;
+        // if (CurrentData.Name == "O") return;
 
         int rotation = (activePiece.Rotation + direction + 4) % 4;
         int[] kicks = direction > 0 ? new[] { 0, -1, 1, -2, 2 } : new[] { 0, 1, -1, 2, -2 };
@@ -309,6 +363,11 @@ public class Game2Tetris : MonoBehaviour
         pathResult = pathRules?.Evaluate();
         pathLineRenderer?.Draw(pathResult);
         gameClear = pathResult != null && pathResult.ReachedEndPoint;
+        if (gameClear && !loadingNextStage && stagePresentation != null)
+        {
+            loadingNextStage = true;
+            StartCoroutine(stagePresentation.LoadNextStageAfterDelay(nextStageSceneName, nextStageDelay));
+        }
     }
 
     private Vector2Int ClampToPathPointArea(Vector2Int position)
@@ -382,6 +441,7 @@ public class Game2Tetris : MonoBehaviour
         orderLabelRenderer?.Destroy();
         pathPointRenderer?.Destroy();
         pathLineRenderer?.Destroy();
+        stagePresentation?.Destroy();
     }
 
     private void OnGUI()

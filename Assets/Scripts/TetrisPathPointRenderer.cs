@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections.Generic;
 
 public sealed class TetrisPathPointRenderer
 {
@@ -12,7 +13,13 @@ public sealed class TetrisPathPointRenderer
     private readonly Material dangerMaterial;
     private GameObject startMarker;
     private GameObject endMarker;
-    private readonly System.Collections.Generic.List<GameObject> dangerMarkers = new System.Collections.Generic.List<GameObject>();
+    private readonly List<GameObject> startMarkers = new List<GameObject>();
+    private readonly List<GameObject> endMarkers = new List<GameObject>();
+    private readonly List<GameObject> dangerMarkers = new List<GameObject>();
+
+    public IReadOnlyList<GameObject> StartMarkers => startMarkers;
+    public IReadOnlyList<GameObject> EndMarkers => endMarkers;
+    public IReadOnlyList<GameObject> DangerMarkers => dangerMarkers;
 
     public TetrisPathPointRenderer(
         TetrisBoard board,
@@ -37,6 +44,10 @@ public sealed class TetrisPathPointRenderer
     {
         startMarker = DrawMarker(startMarker, startPoint, startMaterial, "Start Point");
         endMarker = DrawMarker(endMarker, endPoint, endMaterial, "End Point");
+        startMarkers.Clear();
+        endMarkers.Clear();
+        startMarkers.Add(startMarker);
+        endMarkers.Add(endMarker);
         DrawDangerZones(dangerZones);
     }
 
