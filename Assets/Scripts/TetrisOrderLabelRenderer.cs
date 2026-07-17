@@ -109,7 +109,6 @@ public sealed class TetrisOrderLabel : MonoBehaviour
     private Transform target;
     private Transform plane;
     private float heightOffset;
-    private Quaternion labelRotation;
     public bool HasTarget => target != null;
     public bool Targets(Transform candidate) => target == candidate;
 
@@ -118,7 +117,6 @@ public sealed class TetrisOrderLabel : MonoBehaviour
         this.target = target;
         this.plane = plane;
         this.heightOffset = heightOffset;
-        labelRotation = GetCameraCorrectedRotation();
     }
 
     public void Refresh()
@@ -130,10 +128,10 @@ public sealed class TetrisOrderLabel : MonoBehaviour
         }
 
         transform.position = target.position + plane.up * heightOffset;
-        transform.rotation = labelRotation;
+        transform.rotation = GetCameraReadableRotation();
     }
 
-    private Quaternion GetCameraCorrectedRotation()
+    private Quaternion GetCameraReadableRotation()
     {
         Camera mainCamera = Camera.main;
         if (mainCamera == null)
@@ -141,7 +139,6 @@ public sealed class TetrisOrderLabel : MonoBehaviour
             return Quaternion.Euler(90f, 0f, 0f);
         }
 
-        float yRotation = Mathf.Round(mainCamera.transform.eulerAngles.y / 180f) * 180f;
-        return Quaternion.Euler(90f, yRotation, 0f);
+        return Quaternion.LookRotation(mainCamera.transform.forward, mainCamera.transform.up);
     }
 }

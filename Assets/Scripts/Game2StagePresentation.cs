@@ -83,7 +83,7 @@ public sealed class Game2StagePresentation
 
         for (int x = 0; x < boardWidth; x++)
         {
-            floorViews.Add(CreateFrameBlock(new Vector2Int(x, boardDepth), "Floor"));
+            floorViews.Add(CreateFrameBlock(new Vector2Int(x, -1), "Floor"));
         }
     }
 
@@ -107,7 +107,7 @@ public sealed class Game2StagePresentation
         Vector3 center = (min + max) * 0.5f;
 
         stageBackgroundView.transform.position = center + plane.up * 0.01f;
-        stageBackgroundView.transform.rotation = Quaternion.LookRotation(plane.up, plane.forward) * Quaternion.Euler(0f, 0f, 180f);
+        stageBackgroundView.transform.rotation = Quaternion.LookRotation(plane.up, plane.forward);
 
         if (fitBackgroundToCamera)
         {

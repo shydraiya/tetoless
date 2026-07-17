@@ -41,9 +41,9 @@ public sealed class TetrisGhost
         }
 
         Vector2Int landing = piece.Position;
-        while (board.IsValid(data, landing + Vector2Int.up, piece.Rotation))
+        while (board.IsValid(data, landing + Vector2Int.down, piece.Rotation))
         {
-            landing += Vector2Int.up;
+            landing += Vector2Int.down;
         }
 
         root.transform.position = board.CellToWorld(landing) - plane.up * depthOffset;

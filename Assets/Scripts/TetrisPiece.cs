@@ -41,6 +41,17 @@ public struct TetrominoData
         return -minimum;
     }
 
+    public int GetSpawnRowFromTop(int boardDepth)
+    {
+        int maximum = int.MinValue;
+        foreach (Vector2Int cell in Cells)
+        {
+            maximum = Mathf.Max(maximum, cell.y);
+        }
+
+        return boardDepth - 1 - maximum;
+    }
+
     public static Vector2Int RotateCell(Vector2Int cell, int rotation)
     {
         // Must match Quaternion.Euler(0, rotation * 90, 0) used by the visual prefab.

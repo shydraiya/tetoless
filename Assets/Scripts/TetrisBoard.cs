@@ -68,17 +68,17 @@ public sealed class TetrisBoard
     public int ClearFullLines(Action<Transform> beforeDestroyBlock = null)
     {
         int cleared = 0;
-        int row = depth - 1;
-        while (row >= 0)
+        int row = 0;
+        while (row < depth)
         {
             if (!IsRowFull(row))
             {
-                row--;
+                row++;
                 continue;
             }
 
             DeleteRow(row, beforeDestroyBlock);
-            MoveEarlierRowsForward(row);
+            MoveLaterRowsBackward(row);
             cleared++;
         }
 
@@ -121,18 +121,18 @@ public sealed class TetrisBoard
         }
     }
 
-    private void MoveEarlierRowsForward(int clearedRow)
+    private void MoveLaterRowsBackward(int clearedRow)
     {
-        for (int z = clearedRow - 1; z >= 0; z--)
+        for (int z = clearedRow + 1; z < depth; z++)
         {
             for (int x = 0; x < width; x++)
             {
                 TetrisBoardCell cell = cells[x, z];
-                cells[x, z + 1] = cell;
+                cells[x, z - 1] = cell;
                 cells[x, z] = default;
                 if (cell.IsOccupied)
                 {
-                    cell.View.position = CellToWorld(new Vector2Int(x, z + 1));
+                    cell.View.position = CellToWorld(new Vector2Int(x, z - 1));
                 }
             }
         }
