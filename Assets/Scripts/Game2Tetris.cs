@@ -42,15 +42,27 @@ public class Game2Tetris : MonoBehaviour
     [SerializeField, Min(0.01f)] private float orderLabelSize = 0.35f;
     [SerializeField] private float orderLabelHeightOffset = 0.55f;
 
+    [Header("Path Points")]
+    [SerializeField] private Vector2Int pathStartPoint = new Vector2Int(5, 20);
+    [SerializeField] private Vector2Int pathEndPoint = new Vector2Int(5, 0);
+    [SerializeField] private Color pathStartColor = Color.blue;
+    [SerializeField] private Color pathEndColor = Color.green;
+    [SerializeField, Min(0.05f)] private float pathPointSize = 0.8f;
+    [SerializeField] private float pathPointHeightOffset = 0.08f;
+
     private TetrominoData[] tetrominoes;
     private ActiveTetrisPiece activePiece;
     private TetrisBoard board;
     private TetrisGhost ghost;
     private TetrisOrderLabelRenderer orderLabelRenderer;
+    private TetrisPathPointRenderer pathPointRenderer;
+    private TetrisPathRules pathRules;
+    private TetrisPathResult pathResult;
     private SevenBag sevenBag;
     private float nextFallTime;
     private int score;
     private int clearedLines;
+    private int nextLockedBlockId = 1;
     private bool gameOver;
 
     private void Start()
@@ -65,6 +77,7 @@ public class Game2Tetris : MonoBehaviour
         board = new TetrisBoard(boardWidth, boardDepth, cellSize, blockHeight, plane);
         ghost = new TetrisGhost(ghostColor, ghostBehindOffset);
         orderLabelRenderer = new TetrisOrderLabelRenderer(orderLabelColor, orderLabelSize, orderLabelHeightOffset);
+        SetupPath();
         sevenBag = new SevenBag();
         SpawnPiece();
     }
@@ -155,6 +168,7 @@ public class Game2Tetris : MonoBehaviour
         activePiece = new ActiveTetrisPiece
         {
             Type = type,
+            LockedBlockId = nextLockedBlockId++,
             Position = new Vector2Int(boardWidth / 2 - 1, data.GetSpawnRow()),
             Rotation = 0,
             Root = Instantiate(data.Prefab)
@@ -235,9 +249,38 @@ public class Game2Tetris : MonoBehaviour
         System.Action<Transform> removeLabel = orderLabelRenderer == null ? null : orderLabelRenderer.RemoveLabelForTarget;
         int lines = board.ClearFullLines(removeLabel);
         orderLabelRenderer?.Refresh();
+        EvaluatePath();
         clearedLines += lines;
         score += GetLineScore(lines);
         SpawnPiece();
+    }
+
+    private void SetupPath()
+    {
+        Vector2Int startPoint = ClampToPathPointArea(pathStartPoint);
+        Vector2Int endPoint = ClampToPathPointArea(pathEndPoint);
+        pathPointRenderer = new TetrisPathPointRenderer(
+            board,
+            plane,
+            pathStartColor,
+            pathEndColor,
+            pathPointSize,
+            pathPointHeightOffset);
+        pathPointRenderer.Draw(startPoint, endPoint);
+        pathRules = new TetrisPathRules(board, boardWidth, boardDepth, startPoint, endPoint);
+        EvaluatePath();
+    }
+
+    private void EvaluatePath()
+    {
+        pathResult = pathRules?.Evaluate();
+    }
+
+    private Vector2Int ClampToPathPointArea(Vector2Int position)
+    {
+        return new Vector2Int(
+            Mathf.Clamp(position.x, -1, boardWidth),
+            Mathf.Clamp(position.y, -1, boardDepth));
     }
 
     private void UpdatePieceView()
@@ -267,11 +310,13 @@ public class Game2Tetris : MonoBehaviour
     {
         ghost?.Destroy();
         orderLabelRenderer?.Destroy();
+        pathPointRenderer?.Destroy();
     }
 
     private void OnGUI()
     {
         GUI.Label(new Rect(20, 20, 400, 30), $"Score: {score}  Lines: {clearedLines}");
-        if (gameOver) GUI.Label(new Rect(20, 50, 400, 30), "GAME OVER");
+        if (pathResult != null) GUI.Label(new Rect(20, 50, 400, 30), $"Path: {pathResult.ReachableCells.Count} cells");
+        if (gameOver) GUI.Label(new Rect(20, 80, 400, 30), "GAME OVER");
     }
 }

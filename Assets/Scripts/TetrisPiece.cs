@@ -91,6 +91,7 @@ public struct TetrominoData
 public sealed class ActiveTetrisPiece
 {
     public int Type;
+    public int LockedBlockId;
     public Vector2Int Position;
     public int Rotation;
     public GameObject Root;

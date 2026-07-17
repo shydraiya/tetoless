@@ -8,7 +8,7 @@ public sealed class TetrisBoard
     private readonly float cellSize;
     private readonly float blockHeight;
     private readonly Transform plane;
-    private readonly Transform[,] cells;
+    private readonly TetrisBoardCell[,] cells;
     private readonly Transform settledRoot;
 
     public TetrisBoard(int width, int depth, float cellSize, float blockHeight, Transform plane)
@@ -18,7 +18,7 @@ public sealed class TetrisBoard
         this.cellSize = cellSize;
         this.blockHeight = blockHeight;
         this.plane = plane;
-        cells = new Transform[width, depth];
+        cells = new TetrisBoardCell[width, depth];
         settledRoot = new GameObject("Settled Blocks").transform;
     }
 
@@ -32,7 +32,7 @@ public sealed class TetrisBoard
                 return false;
             }
 
-            if (cells[cell.x, cell.y] != null)
+            if (cells[cell.x, cell.y].IsOccupied)
             {
                 return false;
             }
@@ -58,7 +58,7 @@ public sealed class TetrisBoard
             cube.position = CellToWorld(cell);
             cube.rotation = plane.rotation;
             cube.localScale = Vector3.one * cellSize;
-            cells[cell.x, cell.y] = cube;
+            cells[cell.x, cell.y] = new TetrisBoardCell(cube, piece.LockedBlockId, data.OrderNumbers[i]);
         }
 
         UnityEngine.Object.Destroy(piece.Root);
@@ -87,8 +87,13 @@ public sealed class TetrisBoard
 
     public Vector3 CellToWorld(Vector2Int cell)
     {
-        float x = (cell.x - (width - 1) * 0.5f) * cellSize;
-        float z = (cell.y - (depth - 1) * 0.5f) * cellSize;
+        return GridPointToWorld(cell);
+    }
+
+    public Vector3 GridPointToWorld(Vector2Int point)
+    {
+        float x = (point.x - (width - 1) * 0.5f) * cellSize;
+        float z = (point.y - (depth - 1) * 0.5f) * cellSize;
         return plane.position + plane.right * x + plane.up * blockHeight + plane.forward * z;
     }
 
@@ -96,7 +101,7 @@ public sealed class TetrisBoard
     {
         for (int x = 0; x < width; x++)
         {
-            if (cells[x, row] == null)
+            if (!cells[x, row].IsOccupied)
             {
                 return false;
             }
@@ -109,10 +114,10 @@ public sealed class TetrisBoard
     {
         for (int x = 0; x < width; x++)
         {
-            Transform block = cells[x, row];
+            Transform block = cells[x, row].View;
             beforeDestroyBlock?.Invoke(block);
             UnityEngine.Object.Destroy(block.gameObject);
-            cells[x, row] = null;
+            cells[x, row] = default;
         }
     }
 
@@ -122,14 +127,47 @@ public sealed class TetrisBoard
         {
             for (int x = 0; x < width; x++)
             {
-                Transform cube = cells[x, z];
-                cells[x, z + 1] = cube;
-                cells[x, z] = null;
-                if (cube != null)
+                TetrisBoardCell cell = cells[x, z];
+                cells[x, z + 1] = cell;
+                cells[x, z] = default;
+                if (cell.IsOccupied)
                 {
-                    cube.position = CellToWorld(new Vector2Int(x, z + 1));
+                    cell.View.position = CellToWorld(new Vector2Int(x, z + 1));
                 }
             }
         }
     }
+
+    public bool TryGetCell(Vector2Int position, out TetrisBoardCell cell)
+    {
+        cell = default;
+        if (!IsInside(position))
+        {
+            return false;
+        }
+
+        cell = cells[position.x, position.y];
+        return cell.IsOccupied;
+    }
+
+    public bool IsInside(Vector2Int position)
+    {
+        return position.x >= 0 && position.x < width && position.y >= 0 && position.y < depth;
+    }
+}
+
+public readonly struct TetrisBoardCell
+{
+    public readonly Transform View;
+    public readonly int BlockId;
+    public readonly int Order;
+
+    public TetrisBoardCell(Transform view, int blockId, int order)
+    {
+        View = view;
+        BlockId = blockId;
+        Order = order;
+    }
+
+    public bool IsOccupied => View != null;
 }
