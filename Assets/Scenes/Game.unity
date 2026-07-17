@@ -578,6 +578,28 @@ MonoBehaviour:
   height: 20
   fallInterval: 0.7
   fastFallInterval: 0.05
+  enableTetrisCondition: 1
+  nextStageSceneName: Stage2
+  nextStageDelay: 1
+  playMapIntro: 1
+  mapIntroInterval: 1
+  mapRevealEffectPrefab: {fileID: 100004, guid: b46890100828db6429ff69c322b45893, type: 3}
+  mapRevealEffectLifetime: 3
+  stageBackgroundPrefab: {fileID: 100000, guid: 1193cbe3f9794c4e8cc8e18718f029ea, type: 3}
+  fitCameraToBackgroundFrame: 1
+  boardFrameViewportSize: {x: 0.34, y: 0.75}
+  pathLineThickness: 0.3
+  pathLineColor: {r: 1, g: 1, b: 1, a: 1}
+  clearTargetPositions:
+  - {x: 5, y: 17}
+  clearTargetColor: {r: 0, g: 1, b: 0, a: 0.45}
+  dangerZonePositions:
+  - {x: 4, y: 10}
+  - {x: 5, y: 10}
+  - {x: 6, y: 10}
+  dangerZoneEffectPrefab: {fileID: 100002, guid: ec8ca459c13886c48b2e9767acbe237b, type: 3}
+  dangerZoneEffectScale: 1
+  showBlockOrderNumbers: 1
 --- !u!4 &1493006558
 Transform:
   m_ObjectHideFlags: 0

@@ -1,7 +1,9 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.SceneManagement;
 
 public class test : MonoBehaviour
 {
@@ -46,12 +48,31 @@ public class test : MonoBehaviour
 
     [Header("Rules")]
     [SerializeField] private bool enableTetrisCondition = true;
+    [SerializeField] private string nextStageSceneName;
+    [SerializeField, Min(0f)] private float nextStageDelay = 1f;
+
+    [Header("Map Intro")]
+    [SerializeField] private bool playMapIntro = true;
+    [SerializeField, Min(0.05f)] private float mapIntroInterval = 1f;
+    [SerializeField] private GameObject mapRevealEffectPrefab;
+    [SerializeField, Min(0.1f)] private float mapRevealEffectLifetime = 3f;
+
+    [Header("Stage Background")]
+    [SerializeField] private GameObject stageBackgroundPrefab;
+    [SerializeField] private bool fitCameraToBackgroundFrame = true;
+    [SerializeField] private Vector2 boardFrameViewportSize = new Vector2(0.34f, 0.75f);
 
     [Header("Path")]
     [SerializeField, Range(0.05f, 1f)] private float pathLineThickness = 0.3f;
     [SerializeField] private Color pathLineColor = Color.white;
-    [SerializeField, Tooltip("-1 keeps the clear target at the top center.")]
-    private int clearTargetX = -1;
+
+    [Header("Clear Targets")]
+    [SerializeField]
+    private Vector2Int[] clearTargetPositions =
+    {
+        new Vector2Int(5, 17)
+    };
+    [SerializeField] private Color clearTargetColor = new Color(0f, 1f, 0f, 0.45f);
 
     [Header("Danger Zones")]
     [SerializeField]
@@ -61,10 +82,12 @@ public class test : MonoBehaviour
         new Vector2Int(5, 10),
         new Vector2Int(6, 10)
     };
-    [SerializeField] private Color dangerZoneColor = new Color(1f, 0f, 0f, 0.45f);
+    [SerializeField] private GameObject dangerZoneEffectPrefab;
+    [SerializeField, Min(0.1f)] private float dangerZoneEffectScale = 1f;
 
     [Header("Debug")]
     [SerializeField] private bool showBlockOrderNumbers = true;
+    [SerializeField] private Key debugStageClearKey = Key.Backquote;
 
     [Header("Controls")]
     [SerializeField] private Key clockwiseRotationKey = Key.X;
@@ -84,9 +107,15 @@ public class test : MonoBehaviour
     private int nextLockedBlockId = 1;
     private bool gameClear;
     private Transform pathRoot;
-    private GameObject clearTargetView;
+    private GameObject[] clearTargetViews;
     private GameObject[] dangerZoneViews;
     private Vector2Int startPosition;
+    private GameObject stageBackgroundView;
+    private bool mapIntroPlaying;
+    private bool loadingNextStage;
+    private readonly List<GameObject> leftWallViews = new List<GameObject>();
+    private readonly List<GameObject> rightWallViews = new List<GameObject>();
+    private readonly List<GameObject> floorViews = new List<GameObject>();
 
     private void Start()
     {
@@ -97,12 +126,17 @@ public class test : MonoBehaviour
         UpdateClearTargetView();
         UpdateDangerZoneViews();
         SetupCamera();
-        RefreshPathLines();
-        SpawnBlock();
+        SetupStageBackground();
+        StartCoroutine(PlayMapIntroThenStart());
     }
 
     private void Update()
     {
+        if (mapIntroPlaying)
+        {
+            return;
+        }
+
         if (gameOver || gameClear)
         {
             if (Keyboard.current != null && Keyboard.current.rKey.wasPressedThisFrame)
@@ -116,6 +150,12 @@ public class test : MonoBehaviour
         Keyboard keyboard = Keyboard.current;
         if (keyboard == null)
         {
+            return;
+        }
+
+        if (keyboard[debugStageClearKey].wasPressedThisFrame)
+        {
+            SetGameClear();
             return;
         }
 
@@ -193,16 +233,19 @@ public class test : MonoBehaviour
         board = new BoardCell[width, height];
         boardRoot = new GameObject("Tetris Board").transform;
         boardRoot.SetParent(transform, false);
+        leftWallViews.Clear();
+        rightWallViews.Clear();
+        floorViews.Clear();
 
         for (int y = -1; y <= height; y++)
         {
-            CreateBorderBlock(-1, y);
-            CreateBorderBlock(width, y);
+            leftWallViews.Add(CreateBorderBlock(-1, y));
+            rightWallViews.Add(CreateBorderBlock(width, y));
         }
 
         for (int x = 0; x < width; x++)
         {
-            CreateBorderBlock(x, -1);
+            floorViews.Add(CreateBorderBlock(x, -1));
         }
     }
 
@@ -215,10 +258,67 @@ public class test : MonoBehaviour
         }
 
         mainCamera.orthographic = true;
-        mainCamera.orthographicSize = 12f;
+        mainCamera.orthographicSize = GetCameraOrthographicSize(mainCamera);
         mainCamera.transform.position = new Vector3((width - 1) * 0.5f, (height - 1) * 0.5f, -10f);
         mainCamera.transform.rotation = Quaternion.identity;
         mainCamera.backgroundColor = new Color(0.04f, 0.04f, 0.08f);
+    }
+
+    private float GetCameraOrthographicSize(Camera mainCamera)
+    {
+        if (!fitCameraToBackgroundFrame || stageBackgroundPrefab == null)
+        {
+            return 12f;
+        }
+
+        Vector2 frameSize = new Vector2(
+            Mathf.Max(0.05f, boardFrameViewportSize.x),
+            Mathf.Max(0.05f, boardFrameViewportSize.y));
+        float boardWorldWidth = width + 2f;
+        float boardWorldHeight = height + 2f;
+        float sizeByHeight = boardWorldHeight / (2f * frameSize.y);
+        float sizeByWidth = boardWorldWidth / (2f * frameSize.x * mainCamera.aspect);
+        return Mathf.Max(sizeByHeight, sizeByWidth);
+    }
+
+    private void SetupStageBackground()
+    {
+        if (stageBackgroundPrefab == null)
+        {
+            return;
+        }
+
+        if (stageBackgroundView != null)
+        {
+            Destroy(stageBackgroundView);
+        }
+
+        Camera mainCamera = Camera.main;
+        if (mainCamera == null)
+        {
+            return;
+        }
+
+        stageBackgroundView = Instantiate(stageBackgroundPrefab, transform);
+        stageBackgroundView.name = "Stage Background";
+
+        SpriteRenderer renderer = stageBackgroundView.GetComponentInChildren<SpriteRenderer>();
+        if (renderer == null || renderer.sprite == null)
+        {
+            return;
+        }
+
+        float cameraHeight = mainCamera.orthographicSize * 2f;
+        float cameraWidth = cameraHeight * mainCamera.aspect;
+        Vector2 spriteSize = renderer.sprite.bounds.size;
+        float scale = Mathf.Max(cameraWidth / spriteSize.x, cameraHeight / spriteSize.y);
+
+        stageBackgroundView.transform.position = new Vector3(
+            mainCamera.transform.position.x,
+            mainCamera.transform.position.y,
+            6f);
+        stageBackgroundView.transform.localScale = Vector3.one * scale;
+        renderer.sortingOrder = -20;
     }
 
     private void CreateBlockSprite()
@@ -230,11 +330,13 @@ public class test : MonoBehaviour
         blockSprite = Sprite.Create(texture, new Rect(0, 0, 1, 1), Vector2.one * 0.5f, 1f);
     }
 
-    private void CreateBorderBlock(int x, int y)
+    private GameObject CreateBorderBlock(int x, int y)
     {
         GameObject border = CreateView(new Color(0.2f, 0.2f, 0.25f), "Border");
         border.transform.SetParent(boardRoot, false);
         border.transform.localPosition = new Vector3(x, y, 0f);
+        border.SetActive(false);
+        return border;
     }
 
     private GameObject CreateView(Color color, string objectName)
@@ -255,6 +357,7 @@ public class test : MonoBehaviour
         GameObject startBlock = CreateView(new Color(0.55f, 0.55f, 0.6f), "Player Start Block");
         startBlock.transform.SetParent(boardRoot, false);
         startBlock.transform.localPosition = new Vector3(startPosition.x, startPosition.y, 0f);
+        startBlock.SetActive(false);
         AddOrderLabel(startBlock, 1);
 
         board[startPosition.x, startPosition.y] = new BoardCell
@@ -268,18 +371,33 @@ public class test : MonoBehaviour
 
     private void UpdateClearTargetView()
     {
-        Vector2Int clearTarget = GetClearTargetPosition();
-        if (clearTargetView == null)
+        if (clearTargetViews != null)
         {
-            clearTargetView = CreateView(new Color(0f, 1f, 0f, 0.45f), "Clear Target");
-            clearTargetView.transform.SetParent(boardRoot, false);
-            clearTargetView.transform.localScale = Vector3.one * 0.98f;
-
-            SpriteRenderer renderer = clearTargetView.GetComponent<SpriteRenderer>();
-            renderer.sortingOrder = 2;
+            for (int i = 0; i < clearTargetViews.Length; i++)
+            {
+                if (clearTargetViews[i] != null)
+                {
+                    Destroy(clearTargetViews[i]);
+                }
+            }
         }
 
-        clearTargetView.transform.localPosition = new Vector3(clearTarget.x, clearTarget.y, -0.4f);
+        clearTargetViews = new GameObject[clearTargetPositions.Length];
+        for (int i = 0; i < clearTargetPositions.Length; i++)
+        {
+            Vector2Int clearTarget = ClampToBoard(clearTargetPositions[i]);
+            clearTargetPositions[i] = clearTarget;
+
+            GameObject view = CreateView(clearTargetColor, "Clear Target");
+            view.transform.SetParent(boardRoot, false);
+            view.transform.localScale = Vector3.one * 0.98f;
+            view.transform.localPosition = new Vector3(clearTarget.x, clearTarget.y, -0.4f);
+            view.SetActive(false);
+
+            SpriteRenderer renderer = view.GetComponent<SpriteRenderer>();
+            renderer.sortingOrder = 2;
+            clearTargetViews[i] = view;
+        }
     }
 
     private void UpdateDangerZoneViews()
@@ -301,15 +419,118 @@ public class test : MonoBehaviour
             Vector2Int dangerZone = ClampToBoard(dangerZonePositions[i]);
             dangerZonePositions[i] = dangerZone;
 
-            GameObject view = CreateView(dangerZoneColor, "Danger Zone");
+            GameObject view = CreateDangerZoneView();
             view.transform.SetParent(boardRoot, false);
-            view.transform.localScale = Vector3.one * 0.98f;
+            view.transform.localScale = Vector3.one * dangerZoneEffectScale;
             view.transform.localPosition = new Vector3(dangerZone.x, dangerZone.y, -0.45f);
+            view.SetActive(false);
 
-            SpriteRenderer renderer = view.GetComponent<SpriteRenderer>();
-            renderer.sortingOrder = 2;
+            SpriteRenderer renderer = view.GetComponentInChildren<SpriteRenderer>();
+            if (renderer != null)
+            {
+                renderer.sortingOrder = 2;
+            }
+
             dangerZoneViews[i] = view;
         }
+    }
+
+    private GameObject CreateDangerZoneView()
+    {
+        if (dangerZoneEffectPrefab != null)
+        {
+            GameObject effect = Instantiate(dangerZoneEffectPrefab);
+            effect.name = "Danger Zone Fire";
+            return effect;
+        }
+
+        GameObject fallback = CreateView(new Color(1f, 0.35f, 0f, 0.7f), "Danger Zone");
+        fallback.transform.localScale = Vector3.one * 0.98f;
+        return fallback;
+    }
+
+    private IEnumerator PlayMapIntroThenStart()
+    {
+        mapIntroPlaying = true;
+
+        if (!playMapIntro)
+        {
+            RevealInstantly(leftWallViews);
+            RevealInstantly(rightWallViews);
+            RevealInstantly(floorViews);
+            RevealInstantly(board[startPosition.x, startPosition.y].view);
+            RevealInstantly(clearTargetViews);
+            RevealInstantly(dangerZoneViews);
+        }
+        else
+        {
+            yield return RevealStep(leftWallViews);
+            yield return RevealStep(rightWallViews);
+            yield return RevealStep(floorViews);
+            yield return RevealStep(board[startPosition.x, startPosition.y].view);
+            yield return RevealStep(clearTargetViews);
+            yield return RevealStep(dangerZoneViews);
+        }
+
+        RefreshPathLines();
+        SpawnBlock();
+        mapIntroPlaying = false;
+    }
+
+    private IEnumerator RevealStep(IReadOnlyList<GameObject> views)
+    {
+        RevealInstantly(views);
+        yield return new WaitForSeconds(mapIntroInterval);
+    }
+
+    private IEnumerator RevealStep(GameObject view)
+    {
+        RevealInstantly(view);
+        yield return new WaitForSeconds(mapIntroInterval);
+    }
+
+    private void RevealInstantly(IReadOnlyList<GameObject> views)
+    {
+        for (int i = 0; i < views.Count; i++)
+        {
+            RevealInstantly(views[i]);
+        }
+    }
+
+    private void RevealInstantly(GameObject[] views)
+    {
+        if (views == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < views.Length; i++)
+        {
+            RevealInstantly(views[i]);
+        }
+    }
+
+    private void RevealInstantly(GameObject view)
+    {
+        if (view == null)
+        {
+            return;
+        }
+
+        view.SetActive(true);
+        PlayMapRevealEffect(view.transform.localPosition);
+    }
+
+    private void PlayMapRevealEffect(Vector3 localPosition)
+    {
+        if (mapRevealEffectPrefab == null)
+        {
+            return;
+        }
+
+        Vector3 worldPosition = boardRoot.TransformPoint(new Vector3(localPosition.x, localPosition.y, -1f));
+        GameObject effect = Instantiate(mapRevealEffectPrefab, worldPosition, Quaternion.identity);
+        Destroy(effect, mapRevealEffectLifetime);
     }
 
     private void SpawnBlock()
@@ -562,6 +783,8 @@ public class test : MonoBehaviour
         pathRoot = new GameObject("Reachable Path Lines").transform;
         pathRoot.SetParent(boardRoot, false);
         gameClear = false;
+        bool reachedClearTarget = false;
+        bool reachedDangerZone = false;
 
         if (!IsInsideBoard(startPosition) || board[startPosition.x, startPosition.y] == null)
         {
@@ -575,10 +798,9 @@ public class test : MonoBehaviour
         visited[startPosition.x, startPosition.y] = true;
         queue.Enqueue(startPosition);
 
-        Vector2Int clearTarget = GetClearTargetPosition();
-        if (startPosition == clearTarget)
+        if (IsClearTarget(startPosition))
         {
-            gameClear = true;
+            reachedClearTarget = true;
         }
 
         while (queue.Count > 0)
@@ -597,7 +819,7 @@ public class test : MonoBehaviour
 
                 if (IsDangerZone(next))
                 {
-                    gameOver = true;
+                    reachedDangerZone = true;
                 }
 
                 if (visited[next.x, next.y])
@@ -608,11 +830,23 @@ public class test : MonoBehaviour
                 visited[next.x, next.y] = true;
                 queue.Enqueue(next);
 
-                if (next == clearTarget)
+                if (IsClearTarget(next))
                 {
-                    gameClear = true;
+                    reachedClearTarget = true;
                 }
             }
+        }
+
+        if (reachedDangerZone)
+        {
+            gameOver = true;
+            gameClear = false;
+            return;
+        }
+
+        if (reachedClearTarget)
+        {
+            SetGameClear();
         }
     }
 
@@ -696,10 +930,38 @@ public class test : MonoBehaviour
         renderer.sortingOrder = 3;
     }
 
-    private Vector2Int GetClearTargetPosition()
+    private bool IsClearTarget(Vector2Int position)
     {
-        int targetX = clearTargetX < 0 ? width / 2 : Mathf.Clamp(clearTargetX, 0, width - 1);
-        return new Vector2Int(targetX, height - 3);
+        for (int i = 0; i < clearTargetPositions.Length; i++)
+        {
+            if (ClampToBoard(clearTargetPositions[i]) == position)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void SetGameClear()
+    {
+        if (gameOver || gameClear)
+        {
+            return;
+        }
+
+        gameClear = true;
+        if (!string.IsNullOrWhiteSpace(nextStageSceneName) && !loadingNextStage)
+        {
+            StartCoroutine(LoadNextStageAfterDelay());
+        }
+    }
+
+    private IEnumerator LoadNextStageAfterDelay()
+    {
+        loadingNextStage = true;
+        yield return new WaitForSeconds(nextStageDelay);
+        SceneManager.LoadScene(nextStageSceneName);
     }
 
     private bool IsDangerZone(Vector2Int position)
@@ -814,10 +1076,16 @@ public class test : MonoBehaviour
             Destroy(boardRoot.gameObject);
         }
 
+        if (stageBackgroundView != null)
+        {
+            Destroy(stageBackgroundView);
+        }
+
         score = 0;
         clearedLines = 0;
         gameOver = false;
         gameClear = false;
+        loadingNextStage = false;
         blockBag = null;
         blockBagIndex = 0;
         nextLockedBlockId = 1;
@@ -825,8 +1093,9 @@ public class test : MonoBehaviour
         SetupPlayerStart();
         UpdateClearTargetView();
         UpdateDangerZoneViews();
-        RefreshPathLines();
-        SpawnBlock();
+        SetupCamera();
+        SetupStageBackground();
+        StartCoroutine(PlayMapIntroThenStart());
     }
 
     private void OnGUI()
