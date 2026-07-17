@@ -36,10 +36,17 @@ public class Game2Tetris : MonoBehaviour
     [SerializeField] private Color ghostColor = new Color(1f, 1f, 1f, 0.25f);
     [SerializeField, Min(0f)] private float ghostBehindOffset = 0.05f;
 
+    [Header("Order Labels")]
+    [SerializeField] private bool showOrderLabels = true;
+    [SerializeField] private Color orderLabelColor = Color.black;
+    [SerializeField, Min(0.01f)] private float orderLabelSize = 0.35f;
+    [SerializeField] private float orderLabelHeightOffset = 0.55f;
+
     private TetrominoData[] tetrominoes;
     private ActiveTetrisPiece activePiece;
     private TetrisBoard board;
     private TetrisGhost ghost;
+    private TetrisOrderLabelRenderer orderLabelRenderer;
     private SevenBag sevenBag;
     private float nextFallTime;
     private int score;
@@ -57,6 +64,7 @@ public class Game2Tetris : MonoBehaviour
         CreateTetrominoes();
         board = new TetrisBoard(boardWidth, boardDepth, cellSize, blockHeight, plane);
         ghost = new TetrisGhost(ghostColor, ghostBehindOffset);
+        orderLabelRenderer = new TetrisOrderLabelRenderer(orderLabelColor, orderLabelSize, orderLabelHeightOffset);
         sevenBag = new SevenBag();
         SpawnPiece();
     }
@@ -154,6 +162,11 @@ public class Game2Tetris : MonoBehaviour
 
         activePiece.Root.name = $"Active {data.Name}";
         activePiece.Root.transform.localScale = Vector3.one * cellSize;
+        if (showOrderLabels)
+        {
+            orderLabelRenderer.AddLabels(data, activePiece.Root.transform, plane);
+        }
+
         UpdatePieceView();
         nextFallTime = Time.time + fallInterval;
 
@@ -216,9 +229,12 @@ public class Game2Tetris : MonoBehaviour
             return;
         }
 
+        orderLabelRenderer?.Refresh();
         ghost.Destroy();
         activePiece = null;
-        int lines = board.ClearFullLines();
+        System.Action<Transform> removeLabel = orderLabelRenderer == null ? null : orderLabelRenderer.RemoveLabelForTarget;
+        int lines = board.ClearFullLines(removeLabel);
+        orderLabelRenderer?.Refresh();
         clearedLines += lines;
         score += GetLineScore(lines);
         SpawnPiece();
@@ -228,6 +244,7 @@ public class Game2Tetris : MonoBehaviour
     {
         activePiece.Root.transform.position = board.CellToWorld(activePiece.Position);
         activePiece.Root.transform.rotation = plane.rotation * Quaternion.Euler(0f, activePiece.Rotation * 90f, 0f);
+        orderLabelRenderer?.Refresh();
         UpdateGhost();
     }
 
@@ -249,6 +266,7 @@ public class Game2Tetris : MonoBehaviour
     private void OnDestroy()
     {
         ghost?.Destroy();
+        orderLabelRenderer?.Destroy();
     }
 
     private void OnGUI()

@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 public sealed class TetrisBoard
@@ -60,11 +61,11 @@ public sealed class TetrisBoard
             cells[cell.x, cell.y] = cube;
         }
 
-        Object.Destroy(piece.Root);
+        UnityEngine.Object.Destroy(piece.Root);
         return true;
     }
 
-    public int ClearFullLines()
+    public int ClearFullLines(Action<Transform> beforeDestroyBlock = null)
     {
         int cleared = 0;
         int row = depth - 1;
@@ -76,7 +77,7 @@ public sealed class TetrisBoard
                 continue;
             }
 
-            DeleteRow(row);
+            DeleteRow(row, beforeDestroyBlock);
             MoveEarlierRowsForward(row);
             cleared++;
         }
@@ -104,11 +105,13 @@ public sealed class TetrisBoard
         return true;
     }
 
-    private void DeleteRow(int row)
+    private void DeleteRow(int row, Action<Transform> beforeDestroyBlock)
     {
         for (int x = 0; x < width; x++)
         {
-            Object.Destroy(cells[x, row].gameObject);
+            Transform block = cells[x, row];
+            beforeDestroyBlock?.Invoke(block);
+            UnityEngine.Object.Destroy(block.gameObject);
             cells[x, row] = null;
         }
     }
