@@ -33,6 +33,10 @@ public class test : MonoBehaviour
     [SerializeField, Min(0.05f)] private float fallInterval = 0.7f;
     [SerializeField, Min(0.01f)] private float fastFallInterval = 0.05f;
 
+    [Header("Controls")]
+    [SerializeField] private Key clockwiseRotationKey = Key.X;
+    [SerializeField] private Key counterClockwiseRotationKey = Key.Z;
+
     private BlockData[] blockData;
     private GameObject[,] board;
     private ActiveBlock activeBlock;
@@ -42,6 +46,8 @@ public class test : MonoBehaviour
     private int score;
     private int clearedLines;
     private bool gameOver;
+    private int[] blockBag;
+    private int blockBagIndex;
 
     private void Start()
     {
@@ -80,9 +86,14 @@ public class test : MonoBehaviour
             TryMove(Vector2Int.right);
         }
 
-        if (keyboard.upArrowKey.wasPressedThisFrame || keyboard.wKey.wasPressedThisFrame)
+        if (keyboard[clockwiseRotationKey].wasPressedThisFrame)
         {
-            TryRotate();
+            TryRotate(1);
+        }
+
+        if (keyboard[counterClockwiseRotationKey].wasPressedThisFrame)
+        {
+            TryRotate(-1);
         }
 
         if (keyboard.spaceKey.wasPressedThisFrame)
@@ -196,7 +207,7 @@ public class test : MonoBehaviour
 
     private void SpawnBlock()
     {
-        int index = UnityEngine.Random.Range(0, blockData.Length);
+        int index = DrawBlockFromBag();
         ActiveBlock next = new ActiveBlock
         {
             dataIndex = index,
@@ -221,6 +232,34 @@ public class test : MonoBehaviour
         }
     }
 
+    private int DrawBlockFromBag()
+    {
+        if (blockBag == null || blockBagIndex >= blockBag.Length)
+        {
+            FillAndShuffleBlockBag();
+        }
+
+        return blockBag[blockBagIndex++];
+    }
+
+    private void FillAndShuffleBlockBag()
+    {
+        blockBag = new int[blockData.Length];
+        for (int i = 0; i < blockBag.Length; i++)
+        {
+            blockBag[i] = i;
+        }
+
+        // Fisher-Yates 셔플: 한 세트 안에서 7종 블록이 정확히 한 번씩 나온다.
+        for (int i = blockBag.Length - 1; i > 0; i--)
+        {
+            int randomIndex = UnityEngine.Random.Range(0, i + 1);
+            (blockBag[i], blockBag[randomIndex]) = (blockBag[randomIndex], blockBag[i]);
+        }
+
+        blockBagIndex = 0;
+    }
+
     private bool TryMove(Vector2Int direction)
     {
         Vector2Int target = activeBlock.position + direction;
@@ -234,15 +273,17 @@ public class test : MonoBehaviour
         return true;
     }
 
-    private void TryRotate()
+    private void TryRotate(int direction)
     {
         if (blockData[activeBlock.dataIndex].name == "O")
         {
             return;
         }
 
-        int targetRotation = (activeBlock.rotation + 1) % 4;
-        int[] wallKicks = { 0, -1, 1, -2, 2 };
+        int targetRotation = (activeBlock.rotation + direction + 4) % 4;
+        int[] wallKicks = direction > 0
+            ? new[] { 0, -1, 1, -2, 2 }
+            : new[] { 0, 1, -1, 2, -2 };
 
         foreach (int kick in wallKicks)
         {
@@ -413,6 +454,8 @@ public class test : MonoBehaviour
         score = 0;
         clearedLines = 0;
         gameOver = false;
+        blockBag = null;
+        blockBagIndex = 0;
         SetupBoard();
         SpawnBlock();
     }
@@ -426,7 +469,10 @@ public class test : MonoBehaviour
         };
 
         GUI.Label(new Rect(20, 20, 350, 35), $"Score: {score}   Lines: {clearedLines}", style);
-        GUI.Label(new Rect(20, 52, 600, 35), "← → 이동  |  ↑ 회전  |  ↓ 빠르게  |  Space 즉시 낙하", style);
+        GUI.Label(
+            new Rect(20, 52, 850, 35),
+            $"← → 이동 | {clockwiseRotationKey} 시계 회전 | {counterClockwiseRotationKey} 반시계 회전 | ↓ 빠르게 | Space 즉시 낙하",
+            style);
 
         if (!gameOver)
         {
