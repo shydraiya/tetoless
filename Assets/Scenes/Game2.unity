@@ -306,7 +306,10 @@ MonoBehaviour:
   pathStartColor: {r: 0, g: 0, b: 1, a: 1}
   pathEndColor: {r: 0, g: 1, b: 0, a: 1}
   pathPointSize: 0.8
-  pathPointHeightOffset: 0.08
+  pathPointHeightOffset: 1
+  pathLineColor: {r: 1, g: 1, b: 1, a: 1}
+  pathLineThickness: 0.5
+  pathLineHeightOffset: 2
 --- !u!4 &334700905
 Transform:
   m_ObjectHideFlags: 0

@@ -49,6 +49,9 @@ public class Game2Tetris : MonoBehaviour
     [SerializeField] private Color pathEndColor = Color.green;
     [SerializeField, Min(0.05f)] private float pathPointSize = 0.8f;
     [SerializeField] private float pathPointHeightOffset = 0.08f;
+    [SerializeField] private Color pathLineColor = Color.white;
+    [SerializeField, Min(0.01f)] private float pathLineThickness = 0.08f;
+    [SerializeField] private float pathLineHeightOffset = 0.16f;
 
     private TetrominoData[] tetrominoes;
     private ActiveTetrisPiece activePiece;
@@ -56,6 +59,7 @@ public class Game2Tetris : MonoBehaviour
     private TetrisGhost ghost;
     private TetrisOrderLabelRenderer orderLabelRenderer;
     private TetrisPathPointRenderer pathPointRenderer;
+    private TetrisPathLineRenderer pathLineRenderer;
     private TetrisPathRules pathRules;
     private TetrisPathResult pathResult;
     private SevenBag sevenBag;
@@ -267,6 +271,12 @@ public class Game2Tetris : MonoBehaviour
             pathPointSize,
             pathPointHeightOffset);
         pathPointRenderer.Draw(startPoint, endPoint);
+        pathLineRenderer = new TetrisPathLineRenderer(
+            board,
+            plane,
+            pathLineColor,
+            pathLineThickness,
+            pathLineHeightOffset);
         pathRules = new TetrisPathRules(board, boardWidth, boardDepth, startPoint, endPoint);
         EvaluatePath();
     }
@@ -274,6 +284,7 @@ public class Game2Tetris : MonoBehaviour
     private void EvaluatePath()
     {
         pathResult = pathRules?.Evaluate();
+        pathLineRenderer?.Draw(pathResult);
     }
 
     private Vector2Int ClampToPathPointArea(Vector2Int position)
@@ -311,6 +322,7 @@ public class Game2Tetris : MonoBehaviour
         ghost?.Destroy();
         orderLabelRenderer?.Destroy();
         pathPointRenderer?.Destroy();
+        pathLineRenderer?.Destroy();
     }
 
     private void OnGUI()
