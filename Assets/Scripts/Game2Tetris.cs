@@ -164,6 +164,7 @@ public class Game2Tetris : MonoBehaviour
         }
 
         CacheGarbageTimerColor();
+        ApplySavedKeyBindings();
         CreateTetrominoes();
         board = new TetrisBoard(boardWidth, boardDepth, cellSize, blockHeight, plane);
         AlignCameraToBoard();
@@ -204,6 +205,13 @@ public class Game2Tetris : MonoBehaviour
             pathPointRenderer.DangerMarkers);
         mapIntroPlaying = false;
         SpawnPiece();
+    }
+
+    private void ApplySavedKeyBindings()
+    {
+        holdKey = KeyBindingSettings.HoldKey;
+        clockwiseKey = KeyBindingSettings.ClockwiseKey;
+        counterClockwiseKey = KeyBindingSettings.CounterClockwiseKey;
     }
 
     private void Update()
