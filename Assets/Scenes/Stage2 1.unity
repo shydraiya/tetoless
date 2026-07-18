@@ -604,11 +604,13 @@ MonoBehaviour:
   orderLabelSize: 0.1
   orderLabelHeightOffset: 0.55
   pathStartPoint: {x: 5, y: -1}
-  pathEndPoint: {x: 5, y: 15}
+  pathEndPoints:
+  - {x: 4, y: 17}
+  - {x: 6, y: 17}
   pathStartColor: {r: 0, g: 0, b: 1, a: 1}
   pathEndColor: {r: 0, g: 1, b: 0, a: 1}
   dangerZoneColor: {r: 1, g: 0, b: 0, a: 0.2784314}
-  dangerZonePrefab: {fileID: 100002, guid: 21f6aea0c9b788c4b9b6275efc33d0f9, type: 3}
+  dangerZonePrefab: {fileID: 100002, guid: ec8ca459c13886c48b2e9767acbe237b, type: 3}
   dangerZonePrefabScale: 1
   dangerZonePrefabRotation: {x: 0, y: 0, z: 0}
   pathPointSize: 0.8
@@ -616,22 +618,27 @@ MonoBehaviour:
   pathLineColor: {r: 1, g: 1, b: 1, a: 1}
   pathLineThickness: 0.2
   pathLineHeightOffset: 2
+  pathLineEffectPrefab: {fileID: 178460, guid: 2736bbc2f2c78a949957b0719c2992bd, type: 3}
   dangerZonePositions:
   - {x: 4, y: 10}
   - {x: 5, y: 10}
   - {x: 6, y: 10}
+  - {x: 5, y: 12}
   playMapIntro: 1
   mapIntroInterval: 1
   mapRevealEffectPrefab: {fileID: 100004, guid: b46890100828db6429ff69c322b45893, type: 3}
   mapRevealEffectLifetime: 3
   stageBackgroundPrefab: {fileID: 100000, guid: 1193cbe3f9794c4e8cc8e18718f029ea, type: 3}
   fitBackgroundToCamera: 1
+  fitBackgroundToBoardFrame: 1
+  backgroundFrameCenter: {x: 0.497, y: 0.508}
+  backgroundFrameSize: {x: 0.285, y: 0.723}
   stageFramePrefab: {fileID: 0}
   stageFrameColor: {r: 0.15012017, g: 0.15012017, b: 0.18396229, a: 1}
   stageFrameHeightOffset: 0.04
   stageFrameScale: 1
   stageFrameThickness: 0.03
-  nextStageSceneName: 
+  nextStageSceneName: Stage3
   nextStageDelay: 1
 --- !u!4 &1929594803
 Transform:

@@ -37,6 +37,7 @@ public class Game2Tetris : MonoBehaviour
     [SerializeField] private Key hardDropKey = Key.Space;
     [SerializeField] private Key clockwiseKey = Key.X;
     [SerializeField] private Key counterClockwiseKey = Key.Z;
+    [SerializeField] private Key debugStageClearKey = Key.Backquote;
 
     [Header("Ghost Piece")]
     [SerializeField] private Color ghostColor = new Color(1f, 1f, 1f, 0.25f);
@@ -50,7 +51,10 @@ public class Game2Tetris : MonoBehaviour
 
     [Header("Path Points")]
     [SerializeField] private Vector2Int pathStartPoint = new Vector2Int(5, -1);
-    [SerializeField] private Vector2Int pathEndPoint = new Vector2Int(5, 20);
+    [SerializeField] private Vector2Int[] pathEndPoints =
+    {
+        new Vector2Int(5, 20)
+    };
     [SerializeField] private Color pathStartColor = Color.blue;
     [SerializeField] private Color pathEndColor = Color.green;
     [SerializeField] private Color dangerZoneColor = new Color(1f, 0f, 0f, 0.45f);
@@ -62,6 +66,7 @@ public class Game2Tetris : MonoBehaviour
     [SerializeField] private Color pathLineColor = Color.white;
     [SerializeField, Min(0.01f)] private float pathLineThickness = 0.08f;
     [SerializeField] private float pathLineHeightOffset = 0.16f;
+    [SerializeField] private GameObject pathLineEffectPrefab;
     [SerializeField] private Vector2Int[] dangerZonePositions =
     {
         new Vector2Int(4, 10),
@@ -76,6 +81,9 @@ public class Game2Tetris : MonoBehaviour
     [SerializeField, Min(0.1f)] private float mapRevealEffectLifetime = 3f;
     [SerializeField] private GameObject stageBackgroundPrefab;
     [SerializeField] private bool fitBackgroundToCamera = true;
+    [SerializeField] private bool fitBackgroundToBoardFrame = true;
+    [SerializeField] private Vector2 backgroundFrameCenter = new Vector2(0.497f, 0.508f);
+    [SerializeField] private Vector2 backgroundFrameSize = new Vector2(0.285f, 0.723f);
     [SerializeField] private GameObject stageFramePrefab;
     [SerializeField] private Color stageFrameColor = new Color(0.18f, 0.18f, 0.22f, 1f);
     [SerializeField] private float stageFrameHeightOffset = 0.04f;
@@ -134,6 +142,9 @@ public class Game2Tetris : MonoBehaviour
             boardDepth,
             stageBackgroundPrefab,
             fitBackgroundToCamera,
+            fitBackgroundToBoardFrame,
+            backgroundFrameCenter,
+            backgroundFrameSize,
             stageFramePrefab,
             stageFrameColor,
             Mathf.Max(0.02f, Mathf.Min(stageFrameHeightOffset, pathPointHeightOffset - 0.01f)),
@@ -172,6 +183,12 @@ public class Game2Tetris : MonoBehaviour
 
     private void HandleInput(Keyboard keyboard)
     {
+        if (keyboard[debugStageClearKey].wasPressedThisFrame)
+        {
+            TriggerGameClear();
+            return;
+        }
+
         if (keyboard[moveLeftKey].wasPressedThisFrame) TryMove(Vector2Int.left);
         if (keyboard[moveRightKey].wasPressedThisFrame) TryMove(Vector2Int.right);
         if (keyboard[clockwiseKey].wasPressedThisFrame) TryRotate(1);
@@ -378,7 +395,7 @@ public class Game2Tetris : MonoBehaviour
     private void SetupPath()
     {
         Vector2Int startPoint = ClampToPathPointArea(pathStartPoint);
-        Vector2Int endPoint = ClampToPathPointArea(pathEndPoint);
+        Vector2Int[] endPoints = ClampPathPoints(pathEndPoints);
         pathPointRenderer = new TetrisPathPointRenderer(
             board,
             plane,
@@ -391,23 +408,53 @@ public class Game2Tetris : MonoBehaviour
             dangerZonePrefabScale,
             dangerZonePrefabRotation);
         dangerZones = ClampDangerZones(dangerZonePositions);
-        pathPointRenderer.Draw(startPoint, endPoint, dangerZones);
+        pathPointRenderer.Draw(startPoint, endPoints, dangerZones);
         pathLineRenderer = new TetrisPathLineRenderer(
             board,
             plane,
             pathLineColor,
             pathLineThickness,
-            pathLineHeightOffset);
-        pathRules = new TetrisPathRules(board, boardWidth, boardDepth, startPoint, endPoint, dangerZones);
+            pathLineHeightOffset,
+            pathLineEffectPrefab);
+        pathRules = new TetrisPathRules(board, boardWidth, boardDepth, startPoint, endPoints, dangerZones);
         EvaluatePath();
+    }
+
+    private Vector2Int[] ClampPathPoints(Vector2Int[] positions)
+    {
+        if (positions == null || positions.Length == 0)
+        {
+            return new[] { ClampToPathPointArea(pathStartPoint + Vector2Int.up) };
+        }
+
+        Vector2Int[] clamped = new Vector2Int[positions.Length];
+        for (int i = 0; i < positions.Length; i++)
+        {
+            clamped[i] = ClampToPathPointArea(positions[i]);
+        }
+
+        return clamped;
     }
 
     private void EvaluatePath()
     {
         pathResult = pathRules?.Evaluate();
         pathLineRenderer?.Draw(pathResult);
-        gameClear = pathResult != null && pathResult.ReachedEndPoint;
-        if (gameClear && !loadingNextStage && stagePresentation != null)
+        if (pathResult != null && pathResult.ReachedEndPoint)
+        {
+            TriggerGameClear();
+        }
+    }
+
+    private void TriggerGameClear()
+    {
+        if (gameOver || gameClear)
+        {
+            return;
+        }
+
+        gameClear = true;
+        if (!loadingNextStage && stagePresentation != null)
         {
             loadingNextStage = true;
             StartCoroutine(stagePresentation.LoadNextStageAfterDelay(nextStageSceneName, nextStageDelay));

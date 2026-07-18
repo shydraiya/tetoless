@@ -15,7 +15,6 @@ public sealed class TetrisPathPointRenderer
     private readonly Material endMaterial;
     private readonly Material dangerMaterial;
     private GameObject startMarker;
-    private GameObject endMarker;
     private readonly List<GameObject> startMarkers = new List<GameObject>();
     private readonly List<GameObject> endMarkers = new List<GameObject>();
     private readonly List<GameObject> dangerMarkers = new List<GameObject>();
@@ -49,14 +48,12 @@ public sealed class TetrisPathPointRenderer
         dangerMaterial = CreateMaterial(dangerColor);
     }
 
-    public void Draw(Vector2Int startPoint, Vector2Int endPoint, Vector2Int[] dangerZones)
+    public void Draw(Vector2Int startPoint, Vector2Int[] endPoints, Vector2Int[] dangerZones)
     {
         startMarker = DrawMarker(startMarker, startPoint, startMaterial, "Start Point");
-        endMarker = DrawMarker(endMarker, endPoint, endMaterial, "End Point");
         startMarkers.Clear();
-        endMarkers.Clear();
         startMarkers.Add(startMarker);
-        endMarkers.Add(endMarker);
+        DrawEndPoints(endPoints);
         DrawDangerZones(dangerZones);
     }
 
@@ -86,6 +83,23 @@ public sealed class TetrisPathPointRenderer
         for (int i = 0; i < dangerZones.Length; i++)
         {
             dangerMarkers.Add(DrawDangerMarker(dangerZones[i]));
+        }
+    }
+
+    private void DrawEndPoints(Vector2Int[] endPoints)
+    {
+        for (int i = 0; i < endMarkers.Count; i++)
+        {
+            if (endMarkers[i] != null)
+            {
+                Object.Destroy(endMarkers[i]);
+            }
+        }
+
+        endMarkers.Clear();
+        for (int i = 0; i < endPoints.Length; i++)
+        {
+            endMarkers.Add(DrawMarker(null, endPoints[i], endMaterial, "End Point"));
         }
     }
 
