@@ -14,6 +14,8 @@ public sealed class TetrisGarbageLineManager
 
     private float nextRiseTime;
 
+    public float RemainingTime => Mathf.Max(0f, nextRiseTime - Time.time);
+
     public TetrisGarbageLineManager(
         TetrisBoard board,
         GameObject blockPrefab,

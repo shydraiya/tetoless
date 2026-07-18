@@ -149,6 +149,63 @@ public sealed class TetrisBoard
         return true;
     }
 
+    public int ClearBottomRows(int rowCount, Action<Transform> beforeDestroyBlock = null, Action<Vector2Int> beforeClearCell = null)
+    {
+        rowCount = Mathf.Clamp(rowCount, 0, depth);
+        if (rowCount == 0)
+        {
+            return 0;
+        }
+
+        int clearedBlocks = 0;
+        for (int y = 0; y < rowCount; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                if (ClearCell(x, y, beforeDestroyBlock, beforeClearCell))
+                {
+                    clearedBlocks++;
+                }
+            }
+        }
+
+        for (int y = rowCount; y < depth; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                TetrisBoardCell cell = cells[x, y];
+                cells[x, y - rowCount] = cell;
+                cells[x, y] = default;
+                if (cell.IsOccupied)
+                {
+                    cell.View.position = CellToWorld(new Vector2Int(x, y - rowCount));
+                }
+            }
+        }
+
+        return clearedBlocks;
+    }
+
+    public int ClearColumns(int startColumn, int columnCount, Action<Transform> beforeDestroyBlock = null, Action<Vector2Int> beforeClearCell = null)
+    {
+        startColumn = Mathf.Clamp(startColumn, 0, width - 1);
+        columnCount = Mathf.Clamp(columnCount, 0, width - startColumn);
+        int clearedBlocks = 0;
+
+        for (int x = startColumn; x < startColumn + columnCount; x++)
+        {
+            for (int y = 0; y < depth; y++)
+            {
+                if (ClearCell(x, y, beforeDestroyBlock, beforeClearCell))
+                {
+                    clearedBlocks++;
+                }
+            }
+        }
+
+        return clearedBlocks;
+    }
+
     public Vector3 CellToWorld(Vector2Int cell)
     {
         return GridPointToWorld(cell);
@@ -178,11 +235,23 @@ public sealed class TetrisBoard
     {
         for (int x = 0; x < width; x++)
         {
-            Transform block = cells[x, row].View;
-            beforeDestroyBlock?.Invoke(block);
-            UnityEngine.Object.Destroy(block.gameObject);
-            cells[x, row] = default;
+            ClearCell(x, row, beforeDestroyBlock, null);
         }
+    }
+
+    private bool ClearCell(int x, int y, Action<Transform> beforeDestroyBlock, Action<Vector2Int> beforeClearCell)
+    {
+        TetrisBoardCell cell = cells[x, y];
+        if (!cell.IsOccupied)
+        {
+            return false;
+        }
+
+        beforeClearCell?.Invoke(new Vector2Int(x, y));
+        beforeDestroyBlock?.Invoke(cell.View);
+        UnityEngine.Object.Destroy(cell.View.gameObject);
+        cells[x, y] = default;
+        return true;
     }
 
     private void MoveLaterRowsBackward(int clearedRow)
