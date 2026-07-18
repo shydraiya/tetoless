@@ -597,6 +597,8 @@ MonoBehaviour:
   hardDropKey: 1
   clockwiseKey: 38
   counterClockwiseKey: 40
+  debugStageClearKey: 4
+  restartKey: 32
   ghostColor: {r: 1, g: 1, b: 1, a: 0.25}
   ghostBehindOffset: 0.05
   showOrderLabels: 1
@@ -605,8 +607,8 @@ MonoBehaviour:
   orderLabelHeightOffset: 0.55
   pathStartPoint: {x: 5, y: -1}
   pathEndPoints:
-  - {x: 4, y: 17}
-  - {x: 6, y: 17}
+  - {x: 4, y: 15}
+  - {x: 6, y: 15}
   pathStartColor: {r: 0, g: 0, b: 1, a: 1}
   pathEndColor: {r: 0, g: 1, b: 0, a: 1}
   dangerZoneColor: {r: 1, g: 0, b: 0, a: 0.2784314}
@@ -638,7 +640,7 @@ MonoBehaviour:
   stageFrameHeightOffset: 0.04
   stageFrameScale: 1
   stageFrameThickness: 0.03
-  nextStageSceneName: Stage3
+  nextStageSceneName: Stage2
   nextStageDelay: 1
 --- !u!4 &1929594803
 Transform:
