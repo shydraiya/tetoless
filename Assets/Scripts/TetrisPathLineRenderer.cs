@@ -30,7 +30,7 @@ public sealed class TetrisPathLineRenderer
         this.thickness = thickness;
         this.heightOffset = heightOffset;
         this.effectPrefab = effectPrefab;
-        material = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
+        material = new Material(FindUnlitShader());
         material.color = color;
         if (material.HasProperty("_BaseColor"))
         {
@@ -187,5 +187,26 @@ public sealed class TetrisPathLineRenderer
         mesh.triangles = new[] { 0, 2, 1, 2, 3, 1 };
         mesh.RecalculateNormals();
         return mesh;
+    }
+
+    private static Shader FindUnlitShader()
+    {
+        Shader shader = Shader.Find("Universal Render Pipeline/Unlit");
+        if (shader == null)
+        {
+            shader = Shader.Find("Unlit/Color");
+        }
+
+        if (shader == null)
+        {
+            shader = Shader.Find("Sprites/Default");
+        }
+
+        if (shader == null)
+        {
+            shader = Shader.Find("Standard");
+        }
+
+        return shader;
     }
 }

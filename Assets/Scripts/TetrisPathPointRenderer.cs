@@ -140,7 +140,7 @@ public sealed class TetrisPathPointRenderer
 
     private Material CreateMaterial(Color color)
     {
-        Material material = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
+        Material material = new Material(FindUnlitShader());
         material.color = color;
         if (material.HasProperty("_BaseColor"))
         {
@@ -148,5 +148,26 @@ public sealed class TetrisPathPointRenderer
         }
 
         return material;
+    }
+
+    private static Shader FindUnlitShader()
+    {
+        Shader shader = Shader.Find("Universal Render Pipeline/Unlit");
+        if (shader == null)
+        {
+            shader = Shader.Find("Unlit/Color");
+        }
+
+        if (shader == null)
+        {
+            shader = Shader.Find("Sprites/Default");
+        }
+
+        if (shader == null)
+        {
+            shader = Shader.Find("Standard");
+        }
+
+        return shader;
     }
 }

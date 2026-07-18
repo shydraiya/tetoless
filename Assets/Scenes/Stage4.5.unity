@@ -1140,6 +1140,27 @@ MonoBehaviour:
   gimmick2EffectPrefab: {fileID: 100000, guid: e15f5af5b5f07bd469b5f4f98ed23c39, type: 3}
   gimmickWarningSpawnLead: 2
   gimmickWarningBlinkSpeed: 4
+  hudPosition: {x: 80, y: 50}
+  hudFontSize: 50
+  hudLineSize: {x: 600, y: 80}
+  hudLineSpacing: 100
+  holdPreviewPosition: {x: 180, y: 70}
+  holdPreviewPanelWidth: 260
+  holdPreviewPanelHeight: 150
+  nextPreviewPanelHeight: 140
+  holdPreviewFontSize: 50
+  holdPreviewLabelHeight: 52
+  holdPreviewLabelGap: 30
+  holdPreviewCellSize: 45
+  nextPreviewCellSize: 45
+  holdPreviewSectionSpacing: 250
+  nextPreviewSpacing: 170
+  warningCenterOffset: {x: 0, y: 0}
+  warningFontSize: 56
+  warningLineHeight: 70
+  warningSpacing: 80
+  gameOverFontSize: 64
+  gameOverHeight: 180
   moveLeftKey: 61
   moveRightKey: 62
   softDropKey: 64

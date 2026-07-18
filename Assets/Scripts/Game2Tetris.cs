@@ -6,6 +6,9 @@ using UnityEngine.SceneManagement;
 
 public class Game2Tetris : MonoBehaviour
 {
+    private const float GuiReferenceWidth = 1920f;
+    private const float GuiReferenceHeight = 1080f;
+
     [Header("Board")]
     [Tooltip("Connect the Plane from the Game2 scene.")]
     [SerializeField] private Transform plane;
@@ -59,6 +62,29 @@ public class Game2Tetris : MonoBehaviour
     [Header("Gimmick Warning")]
     [SerializeField, Min(1)] private int gimmickWarningSpawnLead = 2;
     [SerializeField, Min(0.1f)] private float gimmickWarningBlinkSpeed = 4f;
+
+    [Header("Runtime GUI")]
+    [SerializeField] private Vector2 hudPosition = new Vector2(20f, 20f);
+    [SerializeField, Min(10)] private int hudFontSize = 18;
+    [SerializeField] private Vector2 hudLineSize = new Vector2(520f, 34f);
+    [SerializeField, Min(1f)] private float hudLineSpacing = 34f;
+    [SerializeField] private Vector2 holdPreviewPosition = new Vector2(20f, 20f);
+    [SerializeField, Min(80f)] private float holdPreviewPanelWidth = 260f;
+    [SerializeField, Min(40f)] private float holdPreviewPanelHeight = 150f;
+    [SerializeField, Min(40f)] private float nextPreviewPanelHeight = 140f;
+    [SerializeField, Min(8)] private int holdPreviewFontSize = 28;
+    [SerializeField, Min(12f)] private float holdPreviewLabelHeight = 52f;
+    [SerializeField, Min(0f)] private float holdPreviewLabelGap = 8f;
+    [SerializeField, Min(4f)] private float holdPreviewCellSize = 34f;
+    [SerializeField, Min(4f)] private float nextPreviewCellSize = 32f;
+    [SerializeField, Min(30f)] private float holdPreviewSectionSpacing = 180f;
+    [SerializeField, Min(30f)] private float nextPreviewSpacing = 120f;
+    [SerializeField] private Vector2 warningCenterOffset = Vector2.zero;
+    [SerializeField, Min(10)] private int warningFontSize = 56;
+    [SerializeField, Min(20f)] private float warningLineHeight = 70f;
+    [SerializeField, Min(1f)] private float warningSpacing = 80f;
+    [SerializeField, Min(10)] private int gameOverFontSize = 64;
+    [SerializeField, Min(30f)] private float gameOverHeight = 180f;
 
     [Header("Controls")]
     [SerializeField] private Key moveLeftKey = Key.LeftArrow;
@@ -152,6 +178,7 @@ public class Game2Tetris : MonoBehaviour
     private bool mapIntroPlaying;
     private bool loadingNextStage;
     private bool canHold = true;
+    private float elapsedGameTime;
     private Color garbageTimerDefaultColor = Color.white;
 
     private void Start()
@@ -169,6 +196,7 @@ public class Game2Tetris : MonoBehaviour
 
         CacheGarbageTimerColor();
         ApplySavedKeyBindings();
+        elapsedGameTime = 0f;
         CreateTetrominoes();
         board = new TetrisBoard(boardWidth, boardDepth, cellSize, blockHeight, plane);
         AlignCameraToBoard();
@@ -226,6 +254,13 @@ public class Game2Tetris : MonoBehaviour
             return;
         }
 
+        if (!gameOver && !gameClear)
+        {
+            elapsedGameTime += Time.deltaTime;
+        }
+
+        UpdateGameTimerText();
+
         if (gameOver)
         {
             if (keyboard[restartKey].wasPressedThisFrame)
@@ -245,7 +280,7 @@ public class Game2Tetris : MonoBehaviour
         HandleAutomaticFall(keyboard);
         HandleLockDelay();
         HandleGarbageRise();
-        UpdateGarbageTimerText();
+        UpdateGameTimerText();
     }
 
     private void HandleInput(Keyboard keyboard)
@@ -444,7 +479,7 @@ public class Game2Tetris : MonoBehaviour
         }
     }
 
-    private void UpdateGarbageTimerText()
+    private void UpdateGameTimerText()
     {
         if (garbageTimerText == null)
         {
@@ -456,16 +491,17 @@ public class Game2Tetris : MonoBehaviour
             garbageTimerText.gameObject.SetActive(true);
         }
 
-        if (!enableGarbageLines || garbageLineManager == null || gameOver || gameClear)
-        {
-            garbageTimerText.color = garbageTimerDefaultColor;
-            garbageTimerText.text = "--:--";
-            return;
-        }
+        int totalSeconds = Mathf.FloorToInt(elapsedGameTime);
+        int minutes = totalSeconds / 60;
+        int seconds = totalSeconds % 60;
+        bool shouldWarn = enableGarbageLines
+            && garbageLineManager != null
+            && !gameOver
+            && !gameClear
+            && garbageLineManager.RemainingTime < 10f;
 
-        int seconds = Mathf.CeilToInt(garbageLineManager.RemainingTime);
-        garbageTimerText.color = seconds < 10 ? Color.red : garbageTimerDefaultColor;
-        garbageTimerText.text = $"{seconds}";
+        garbageTimerText.color = shouldWarn ? Color.red : garbageTimerDefaultColor;
+        garbageTimerText.text = $"{minutes:00}:{seconds:00}";
     }
 
     private void CacheGarbageTimerColor()
@@ -843,11 +879,24 @@ public class Game2Tetris : MonoBehaviour
 
     private void OnGUI()
     {
-        GUI.Label(new Rect(20, 20, 400, 30), $"Score: {score}  Lines: {clearedLines}");
-        if (pathResult != null) GUI.Label(new Rect(20, 50, 400, 30), $"Path: {pathResult.ReachableCells.Count} cells");
-        DrawHoldAndPreviewGui();
-        DrawGimmickWarnings();
-        if (gameClear) GUI.Label(new Rect(20, 80, 400, 30), "GAME CLEAR");
+        Matrix4x4 previousMatrix = GUI.matrix;
+        GUI.matrix = GetScaledGuiMatrix();
+        try
+        {
+            DrawHudGui();
+            DrawHoldAndPreviewGui();
+            DrawGimmickWarnings();
+            DrawStageClearGui();
+            DrawGameOverGui();
+        }
+        finally
+        {
+            GUI.matrix = previousMatrix;
+        }
+    }
+
+    private void DrawGameOverGui()
+    {
         if (!gameOver)
         {
             return;
@@ -855,11 +904,66 @@ public class Game2Tetris : MonoBehaviour
 
         GUIStyle gameOverStyle = new GUIStyle(GUI.skin.label)
         {
-            fontSize = 42,
+            fontSize = gameOverFontSize,
             alignment = TextAnchor.MiddleCenter,
             normal = { textColor = Color.white }
         };
-        GUI.Label(new Rect(0, Screen.height / 2f - 60f, Screen.width, 120f), $"GAME OVER\nPress {restartKey} to Restart", gameOverStyle);
+        GUI.Label(new Rect(0, GetGuiHeight() * 0.5f - gameOverHeight * 0.5f, GetGuiWidth(), gameOverHeight), $"GAME OVER\nPress {restartKey} to Restart", gameOverStyle);
+    }
+
+    private void DrawStageClearGui()
+    {
+        if (!gameClear)
+        {
+            return;
+        }
+
+        GUIStyle stageClearStyle = new GUIStyle(GUI.skin.label)
+        {
+            fontSize = gameOverFontSize,
+            alignment = TextAnchor.MiddleCenter,
+            normal = { textColor = Color.white }
+        };
+        GUI.Label(new Rect(0, GetGuiHeight() * 0.5f - gameOverHeight * 0.5f, GetGuiWidth(), gameOverHeight), "STAGE CLEAR", stageClearStyle);
+    }
+
+    private void DrawHudGui()
+    {
+        GUIStyle hudStyle = new GUIStyle(GUI.skin.label)
+        {
+            fontSize = hudFontSize,
+            normal = { textColor = Color.white }
+        };
+
+        float y = hudPosition.y;
+        GUI.Label(new Rect(hudPosition.x, y, hudLineSize.x, hudLineSize.y), $"Score: {score}  Lines: {clearedLines}", hudStyle);
+        y += hudLineSpacing;
+
+        if (pathResult != null)
+        {
+            GUI.Label(new Rect(hudPosition.x, y, hudLineSize.x, hudLineSize.y), $"Path: {pathResult.ReachableCells.Count} cells", hudStyle);
+            y += hudLineSpacing;
+        }
+    }
+
+    private static Matrix4x4 GetScaledGuiMatrix()
+    {
+        return Matrix4x4.TRS(Vector3.zero, Quaternion.identity, new Vector3(GetGuiScale(), GetGuiScale(), 1f));
+    }
+
+    private static float GetGuiScale()
+    {
+        return Mathf.Min(Screen.width / GuiReferenceWidth, Screen.height / GuiReferenceHeight);
+    }
+
+    private static float GetGuiWidth()
+    {
+        return Screen.width / GetGuiScale();
+    }
+
+    private static float GetGuiHeight()
+    {
+        return Screen.height / GetGuiScale();
     }
 
     private void DrawGimmickWarnings()
@@ -869,11 +973,11 @@ public class Game2Tetris : MonoBehaviour
             return;
         }
 
-        float y = Screen.height * 0.5f - 55f;
+        float y = GetGuiHeight() * 0.5f + warningCenterOffset.y - warningLineHeight;
         if (ShouldShowGimmickWarning(enableGimmick1, gimmick1SpawnInterval))
         {
             DrawGimmickWarning("HORIZONTAL SHOCK DETECTED", y);
-            y += 52f;
+            y += warningSpacing;
         }
 
         if (ShouldShowGimmickWarning(enableGimmick2, gimmick2SpawnInterval))
@@ -901,13 +1005,13 @@ public class Game2Tetris : MonoBehaviour
 
         GUIStyle warningStyle = new GUIStyle(GUI.skin.label)
         {
-            fontSize = 34,
+            fontSize = warningFontSize,
             alignment = TextAnchor.MiddleCenter,
             fontStyle = FontStyle.Bold,
             normal = { textColor = GUI.color }
         };
 
-        GUI.Label(new Rect(0, y, Screen.width, 46f), message, warningStyle);
+        GUI.Label(new Rect(warningCenterOffset.x, y, GetGuiWidth() - warningCenterOffset.x * 2f, warningLineHeight), message, warningStyle);
         GUI.color = previousColor;
     }
 
@@ -918,29 +1022,30 @@ public class Game2Tetris : MonoBehaviour
             return;
         }
 
-        float panelWidth = 170f;
-        float x = Screen.width - panelWidth - 20f;
-        float y = 20f;
+        float x = GetGuiWidth() - holdPreviewPanelWidth - holdPreviewPosition.x;
+        float y = holdPreviewPosition.y;
 
         GUIStyle labelStyle = new GUIStyle(GUI.skin.label)
         {
-            fontSize = 18,
+            fontSize = holdPreviewFontSize,
             normal = { textColor = Color.white }
         };
 
-        GUI.Label(new Rect(x, y, panelWidth, 24f), $"HOLD ({holdKey})", labelStyle);
-        DrawPiecePreview(holdPieceType, x + 12f, y + 30f, 22f);
+        GUI.Label(new Rect(x, y, holdPreviewPanelWidth, holdPreviewLabelHeight), $"HOLD ({holdKey})", labelStyle);
+        DrawPiecePreview(holdPieceType, x + 12f, y + holdPreviewLabelHeight + holdPreviewLabelGap, holdPreviewCellSize, holdPreviewPanelHeight);
 
-        GUI.Label(new Rect(x, y + 125f, panelWidth, 24f), "NEXT", labelStyle);
-        DrawPiecePreview(sevenBag.Peek(0), x + 12f, y + 155f, 20f);
-        DrawPiecePreview(sevenBag.Peek(1), x + 12f, y + 245f, 20f);
+        float nextY = y + holdPreviewSectionSpacing;
+        GUI.Label(new Rect(x, nextY, holdPreviewPanelWidth, holdPreviewLabelHeight), "NEXT", labelStyle);
+        float nextPreviewY = nextY + holdPreviewLabelHeight + holdPreviewLabelGap;
+        DrawPiecePreview(sevenBag.Peek(0), x + 12f, nextPreviewY, nextPreviewCellSize, nextPreviewPanelHeight);
+        DrawPiecePreview(sevenBag.Peek(1), x + 12f, nextPreviewY + nextPreviewSpacing, nextPreviewCellSize, nextPreviewPanelHeight);
     }
 
-    private void DrawPiecePreview(int type, float x, float y, float cellSize)
+    private void DrawPiecePreview(int type, float x, float y, float cellSize, float panelHeight)
     {
         if (type < 0 || type >= tetrominoes.Length)
         {
-            GUI.Label(new Rect(x, y + cellSize, 120f, 24f), "Empty");
+            GUI.Label(new Rect(x, y + cellSize, holdPreviewPanelWidth, cellSize), "Empty");
             return;
         }
 
@@ -949,8 +1054,10 @@ public class Game2Tetris : MonoBehaviour
 
         float width = (maxX - minX + 1) * cellSize;
         float height = (maxY - minY + 1) * cellSize;
-        float offsetX = (100f - width) * 0.5f;
-        float offsetY = (70f - height) * 0.5f;
+        float previewWidth = holdPreviewPanelWidth - 24f;
+        float previewHeight = panelHeight;
+        float offsetX = (previewWidth - width) * 0.5f;
+        float offsetY = (previewHeight - height) * 0.5f;
 
         Color previousColor = GUI.color;
         GUI.color = GetPreviewColor(type);
