@@ -30,6 +30,8 @@ public class Game2Tetris : MonoBehaviour
     [Header("Speed")]
     [SerializeField, Min(0.05f)] private float fallInterval = 0.7f;
     [SerializeField, Min(0.01f)] private float softDropInterval = 0.05f;
+    [SerializeField, Min(0f)] private float lockDelay = 0.5f;
+    [SerializeField, Min(0)] private int maxLockDelayResets = 15;
 
     [Header("Garbage Lines")]
     [SerializeField] private bool enableGarbageLines = true;
@@ -120,6 +122,8 @@ public class Game2Tetris : MonoBehaviour
     private Game2StagePresentation stagePresentation;
     private SevenBag sevenBag;
     private float nextFallTime;
+    private float lockTimer;
+    private int lockDelayResetCount;
     private int score;
     private int clearedLines;
     private int nextLockedBlockId = 1;
@@ -210,6 +214,7 @@ public class Game2Tetris : MonoBehaviour
 
         HandleInput(keyboard);
         HandleAutomaticFall(keyboard);
+        HandleLockDelay();
         HandleGarbageRise();
     }
 
@@ -246,12 +251,24 @@ public class Game2Tetris : MonoBehaviour
             return;
         }
 
-        if (!TryMove(Vector2Int.down))
+        TryMove(Vector2Int.down);
+
+        nextFallTime = Time.time + interval;
+    }
+
+    private void HandleLockDelay()
+    {
+        if (activePiece == null || !IsGrounded())
+        {
+            lockTimer = 0f;
+            return;
+        }
+
+        lockTimer += Time.deltaTime;
+        if (lockTimer >= lockDelay)
         {
             LockPiece();
         }
-
-        nextFallTime = Time.time + interval;
     }
 
     private void HandleGarbageRise()
@@ -366,6 +383,8 @@ public class Game2Tetris : MonoBehaviour
 
         activePiece.Root.name = $"Active {data.Name}";
         activePiece.Root.transform.localScale = Vector3.one * cellSize;
+        lockTimer = 0f;
+        lockDelayResetCount = 0;
         if (showOrderLabels)
         {
             orderLabelRenderer.AddLabels(data, activePiece.Root.transform, plane);
@@ -440,6 +459,7 @@ public class Game2Tetris : MonoBehaviour
 
     private bool TryMove(Vector2Int direction)
     {
+        bool wasGrounded = direction.x != 0 && IsGrounded();
         Vector2Int target = activePiece.Position + direction;
         if (!board.IsValid(CurrentData, target, activePiece.Rotation))
         {
@@ -447,6 +467,7 @@ public class Game2Tetris : MonoBehaviour
         }
 
         activePiece.Position = target;
+        ResetLockDelayAfterAdjustment(wasGrounded);
         UpdatePieceView();
         return true;
     }
@@ -455,6 +476,7 @@ public class Game2Tetris : MonoBehaviour
     {
         // if (CurrentData.Name == "O") return;
 
+        bool wasGrounded = IsGrounded();
         int rotation = (activePiece.Rotation + direction + 4) % 4;
         int[] kicks = direction > 0 ? new[] { 0, -1, 1, -2, 2 } : new[] { 0, 1, -1, 2, -2 };
         foreach (int kick in kicks)
@@ -464,9 +486,27 @@ public class Game2Tetris : MonoBehaviour
 
             activePiece.Position = target;
             activePiece.Rotation = rotation;
+            ResetLockDelayAfterAdjustment(wasGrounded);
             UpdatePieceView();
             return;
         }
+    }
+
+    private bool IsGrounded()
+    {
+        return activePiece != null &&
+               !board.IsValid(CurrentData, activePiece.Position + Vector2Int.down, activePiece.Rotation);
+    }
+
+    private void ResetLockDelayAfterAdjustment(bool wasGrounded)
+    {
+        if (!wasGrounded || !IsGrounded() || lockDelayResetCount >= maxLockDelayResets)
+        {
+            return;
+        }
+
+        lockTimer = 0f;
+        lockDelayResetCount++;
     }
 
     private void HardDrop()
