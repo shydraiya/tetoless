@@ -12,6 +12,9 @@ public sealed class Game2StagePresentation
     private readonly int boardDepth;
     private readonly GameObject stageBackgroundPrefab;
     private readonly bool fitBackgroundToCamera;
+    private readonly bool fitBackgroundToBoardFrame;
+    private readonly Vector2 backgroundFrameCenter;
+    private readonly Vector2 backgroundFrameSize;
     private readonly GameObject stageFramePrefab;
     private readonly Color stageFrameColor;
     private readonly float stageFrameHeightOffset;
@@ -37,6 +40,9 @@ public sealed class Game2StagePresentation
         int boardDepth,
         GameObject stageBackgroundPrefab,
         bool fitBackgroundToCamera,
+        bool fitBackgroundToBoardFrame,
+        Vector2 backgroundFrameCenter,
+        Vector2 backgroundFrameSize,
         GameObject stageFramePrefab,
         Color stageFrameColor,
         float stageFrameHeightOffset,
@@ -52,6 +58,9 @@ public sealed class Game2StagePresentation
         this.boardDepth = boardDepth;
         this.stageBackgroundPrefab = stageBackgroundPrefab;
         this.fitBackgroundToCamera = fitBackgroundToCamera;
+        this.fitBackgroundToBoardFrame = fitBackgroundToBoardFrame;
+        this.backgroundFrameCenter = backgroundFrameCenter;
+        this.backgroundFrameSize = backgroundFrameSize;
         this.stageFramePrefab = stageFramePrefab;
         this.stageFrameColor = stageFrameColor;
         this.stageFrameHeightOffset = stageFrameHeightOffset;
@@ -109,7 +118,11 @@ public sealed class Game2StagePresentation
         stageBackgroundView.transform.position = center + plane.up * 0.01f;
         stageBackgroundView.transform.rotation = Quaternion.LookRotation(plane.up, plane.forward);
 
-        if (fitBackgroundToCamera)
+        if (fitBackgroundToBoardFrame)
+        {
+            FitBackgroundToBoardFrame();
+        }
+        else if (fitBackgroundToCamera)
         {
             FitBackgroundToCamera();
         }
@@ -301,6 +314,57 @@ public sealed class Game2StagePresentation
             board.GridPointToWorld(new Vector2Int(0, boardDepth)));
         float scale = Mathf.Max(boardWorldWidth / backgroundSize.x, boardWorldDepth / backgroundSize.y);
         stageBackgroundView.transform.localScale = Vector3.one * scale;
+    }
+
+    private void FitBackgroundToBoardFrame()
+    {
+        Vector2 backgroundSize = GetLocalRenderSize(stageBackgroundView);
+        Vector2 frameSize = new Vector2(
+            Mathf.Clamp(backgroundFrameSize.x, 0.01f, 1f),
+            Mathf.Clamp(backgroundFrameSize.y, 0.01f, 1f));
+        Vector2 frameCenter = new Vector2(
+            Mathf.Clamp01(backgroundFrameCenter.x),
+            Mathf.Clamp01(backgroundFrameCenter.y));
+
+        if (backgroundSize.x <= 0f || backgroundSize.y <= 0f)
+        {
+            return;
+        }
+
+        Vector3 leftWallCenter = board.GridPointToWorld(new Vector2Int(-1, 0));
+        Vector3 rightWallCenter = board.GridPointToWorld(new Vector2Int(boardWidth, 0));
+        Vector3 floorCenter = board.GridPointToWorld(new Vector2Int(0, -1));
+        Vector3 topWallCenter = board.GridPointToWorld(new Vector2Int(0, boardDepth));
+        float cellWorldSize = Vector3.Distance(
+            board.GridPointToWorld(new Vector2Int(0, 0)),
+            board.GridPointToWorld(new Vector2Int(1, 0)));
+
+        Vector3 leftOuter = leftWallCenter - plane.right * (cellWorldSize * 0.5f);
+        Vector3 rightOuter = rightWallCenter + plane.right * (cellWorldSize * 0.5f);
+        Vector3 floorOuter = floorCenter - plane.forward * (cellWorldSize * 0.5f);
+        Vector3 topOuter = topWallCenter + plane.forward * (cellWorldSize * 0.5f);
+        float boardFrameWorldWidth = Mathf.Abs(Vector3.Dot(rightOuter - leftOuter, plane.right));
+        float boardFrameWorldHeight = Mathf.Abs(Vector3.Dot(topOuter - floorOuter, plane.forward));
+        float scaleByWidth = boardFrameWorldWidth / (backgroundSize.x * frameSize.x);
+        float scaleByHeight = boardFrameWorldHeight / (backgroundSize.y * frameSize.y);
+
+        stageBackgroundView.transform.localScale = new Vector3(
+            scaleByWidth,
+            scaleByHeight,
+            stageBackgroundView.transform.localScale.z);
+
+        Vector3 boardMin = board.GridPointToWorld(new Vector2Int(-1, -1)) -
+            plane.right * (cellWorldSize * 0.5f) -
+            plane.forward * (cellWorldSize * 0.5f);
+        Vector3 boardMax = board.GridPointToWorld(new Vector2Int(boardWidth, boardDepth)) +
+            plane.right * (cellWorldSize * 0.5f) +
+            plane.forward * (cellWorldSize * 0.5f);
+        Vector3 boardCenter = (boardMin + boardMax) * 0.5f;
+        Vector3 localFrameOffset =
+            stageBackgroundView.transform.right * ((frameCenter.x - 0.5f) * backgroundSize.x * scaleByWidth) +
+            stageBackgroundView.transform.up * ((frameCenter.y - 0.5f) * backgroundSize.y * scaleByHeight);
+
+        stageBackgroundView.transform.position = boardCenter - localFrameOffset + plane.up * 0.01f;
     }
 
     private static Vector2 GetLocalRenderSize(GameObject root)

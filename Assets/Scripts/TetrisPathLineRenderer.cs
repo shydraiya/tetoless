@@ -1,23 +1,35 @@
 using UnityEngine;
+using DigitalRuby.LightningBolt;
 
 public sealed class TetrisPathLineRenderer
 {
+    private const float EffectWidthMultiplier = 2.5f;
+    private static readonly Color EffectColor = new Color(1.4f, 1.75f, 2f, 1f);
+
     private readonly TetrisBoard board;
     private readonly Transform plane;
     private readonly Color color;
     private readonly float thickness;
     private readonly float heightOffset;
+    private readonly GameObject effectPrefab;
     private readonly Material material;
     private readonly Mesh lineMesh;
     private readonly Transform root;
 
-    public TetrisPathLineRenderer(TetrisBoard board, Transform plane, Color color, float thickness, float heightOffset)
+    public TetrisPathLineRenderer(
+        TetrisBoard board,
+        Transform plane,
+        Color color,
+        float thickness,
+        float heightOffset,
+        GameObject effectPrefab)
     {
         this.board = board;
         this.plane = plane;
         this.color = color;
         this.thickness = thickness;
         this.heightOffset = heightOffset;
+        this.effectPrefab = effectPrefab;
         material = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
         material.color = color;
         if (material.HasProperty("_BaseColor"))
@@ -74,6 +86,12 @@ public sealed class TetrisPathLineRenderer
 
     private void DrawEdge(TetrisPathEdge edge)
     {
+        if (effectPrefab != null)
+        {
+            DrawEffectEdge(edge);
+            return;
+        }
+
         GameObject lineObject = new GameObject("Path Line");
         lineObject.transform.SetParent(root, false);
 
@@ -92,6 +110,55 @@ public sealed class TetrisPathLineRenderer
 
         MeshFilter filter = lineObject.AddComponent<MeshFilter>();
         filter.sharedMesh = lineMesh;
+    }
+
+    private void DrawEffectEdge(TetrisPathEdge edge)
+    {
+        Vector3 start = GetPoint(edge.From);
+        Vector3 end = GetPoint(edge.To);
+
+        GameObject effect = Object.Instantiate(effectPrefab, root);
+        effect.name = $"Path Lightning {edge.From.x},{edge.From.y} -> {edge.To.x},{edge.To.y}";
+        effect.transform.position = Vector3.zero;
+        effect.transform.rotation = Quaternion.identity;
+        effect.transform.localScale = Vector3.one;
+
+        LightningBoltScript lightning = effect.GetComponentInChildren<LightningBoltScript>();
+        if (lightning != null)
+        {
+            lightning.StartObject = null;
+            lightning.EndObject = null;
+            lightning.StartPosition = start;
+            lightning.EndPosition = end;
+            lightning.ManualMode = false;
+            lightning.UseOrthographicMode = false;
+            lightning.Duration = Mathf.Max(0.01f, lightning.Duration);
+        }
+
+        LineRenderer lineRenderer = effect.GetComponentInChildren<LineRenderer>();
+        if (lineRenderer != null)
+        {
+            lineRenderer.widthMultiplier = Mathf.Max(0.25f, thickness * EffectWidthMultiplier);
+            lineRenderer.useWorldSpace = true;
+            lineRenderer.startColor = EffectColor;
+            lineRenderer.endColor = EffectColor;
+            lineRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            lineRenderer.receiveShadows = false;
+            if (lineRenderer.material != null)
+            {
+                if (lineRenderer.material.HasProperty("_Color"))
+                {
+                    lineRenderer.material.SetColor("_Color", EffectColor);
+                }
+
+                if (lineRenderer.material.HasProperty("_EmissionColor"))
+                {
+                    lineRenderer.material.SetColor("_EmissionColor", EffectColor);
+                }
+
+                lineRenderer.material.renderQueue = 5000;
+            }
+        }
     }
 
     private Vector3 GetPoint(Vector2Int point)

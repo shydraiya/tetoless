@@ -310,6 +310,7 @@ MonoBehaviour:
   pathLineColor: {r: 1, g: 1, b: 1, a: 1}
   pathLineThickness: 0.5
   pathLineHeightOffset: 2
+  pathLineEffectPrefab: {fileID: 178460, guid: 2736bbc2f2c78a949957b0719c2992bd, type: 3}
 --- !u!4 &334700905
 Transform:
   m_ObjectHideFlags: 0

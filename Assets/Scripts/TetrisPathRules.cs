@@ -7,7 +7,7 @@ public sealed class TetrisPathRules
     private readonly int width;
     private readonly int depth;
     private readonly Vector2Int startPoint;
-    private readonly Vector2Int endPoint;
+    private readonly HashSet<Vector2Int> endPoints;
     private readonly HashSet<Vector2Int> dangerZones;
 
     public TetrisPathRules(
@@ -15,15 +15,20 @@ public sealed class TetrisPathRules
         int width,
         int depth,
         Vector2Int startPoint,
-        Vector2Int endPoint,
+        IEnumerable<Vector2Int> endPoints,
         IEnumerable<Vector2Int> dangerZones)
     {
         this.board = board;
         this.width = width;
         this.depth = depth;
         this.startPoint = ClampToPointArea(startPoint);
-        this.endPoint = ClampToPointArea(endPoint);
+        this.endPoints = new HashSet<Vector2Int>();
         this.dangerZones = new HashSet<Vector2Int>();
+
+        foreach (Vector2Int endPoint in endPoints)
+        {
+            this.endPoints.Add(ClampToPointArea(endPoint));
+        }
 
         foreach (Vector2Int dangerZone in dangerZones)
         {
@@ -44,7 +49,7 @@ public sealed class TetrisPathRules
             queue.Enqueue(startCell);
             result.ReachableCells.Add(startCell);
             result.Edges.Add(new TetrisPathEdge(startPoint, startCell));
-            result.ReachedEndPoint |= IsConnectedToPoint(startCell, endPoint);
+            AddEndPointEdges(startCell, result);
         }
 
         while (queue.Count > 0)
@@ -66,15 +71,25 @@ public sealed class TetrisPathRules
                 queue.Enqueue(next);
                 result.ReachableCells.Add(next);
 
-                if (IsConnectedToPoint(next, endPoint))
-                {
-                    result.ReachedEndPoint = true;
-                    result.Edges.Add(new TetrisPathEdge(next, endPoint));
-                }
+                AddEndPointEdges(next, result);
             }
         }
 
         return result;
+    }
+
+    private void AddEndPointEdges(Vector2Int cell, TetrisPathResult result)
+    {
+        foreach (Vector2Int endPoint in endPoints)
+        {
+            if (!IsConnectedToPoint(cell, endPoint))
+            {
+                continue;
+            }
+
+            result.ReachedEndPoint = true;
+            result.Edges.Add(new TetrisPathEdge(cell, endPoint));
+        }
     }
 
     private List<Vector2Int> GetConnectedCells(Vector2Int point)
