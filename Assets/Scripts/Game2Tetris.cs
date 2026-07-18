@@ -47,6 +47,7 @@ public class Game2Tetris : MonoBehaviour
     [SerializeField] private Key hardDropKey = Key.Space;
     [SerializeField] private Key clockwiseKey = Key.X;
     [SerializeField] private Key counterClockwiseKey = Key.Z;
+    [SerializeField] private Key holdKey = Key.S;
     [SerializeField] private Key debugStageClearKey = Key.Backquote;
     [SerializeField] private Key restartKey = Key.R;
 
@@ -122,10 +123,12 @@ public class Game2Tetris : MonoBehaviour
     private int score;
     private int clearedLines;
     private int nextLockedBlockId = 1;
+    private int holdPieceType = -1;
     private bool gameOver;
     private bool gameClear;
     private bool mapIntroPlaying;
     private bool loadingNextStage;
+    private bool canHold = true;
 
     private void Start()
     {
@@ -222,6 +225,7 @@ public class Game2Tetris : MonoBehaviour
         if (keyboard[moveRightKey].wasPressedThisFrame) TryMove(Vector2Int.right);
         if (keyboard[clockwiseKey].wasPressedThisFrame) TryRotate(1);
         if (keyboard[counterClockwiseKey].wasPressedThisFrame) TryRotate(-1);
+        if (keyboard[holdKey].wasPressedThisFrame) HoldPiece();
 
         if (keyboard[hardDropKey].wasPressedThisFrame)
         {
@@ -345,7 +349,11 @@ public class Game2Tetris : MonoBehaviour
 
     private void SpawnPiece()
     {
-        int type = sevenBag.Draw();
+        SpawnPiece(sevenBag.Draw());
+    }
+
+    private void SpawnPiece(int type, bool resetHold)
+    {
         TetrominoData data = tetrominoes[type];
         activePiece = new ActiveTetrisPiece
         {
@@ -373,8 +381,61 @@ public class Game2Tetris : MonoBehaviour
             return;
         }
 
+        if (resetHold)
+        {
+            canHold = true;
+        }
+
         ghost.Create(data, cellSize);
         UpdateGhost();
+    }
+
+    private void SpawnPiece(int type)
+    {
+        SpawnPiece(type, true);
+    }
+
+    private void HoldPiece()
+    {
+        if (!canHold || activePiece == null)
+        {
+            return;
+        }
+
+        int currentType = activePiece.Type;
+        DestroyActivePiece();
+        canHold = false;
+
+        if (holdPieceType < 0)
+        {
+            holdPieceType = currentType;
+            SpawnPiece(sevenBag.Draw(), false);
+            return;
+        }
+
+        int nextType = holdPieceType;
+        holdPieceType = currentType;
+        SpawnPiece(nextType, false);
+    }
+
+    private void DestroyActivePiece()
+    {
+        if (activePiece == null)
+        {
+            return;
+        }
+
+        if (showOrderLabels && orderLabelRenderer != null)
+        {
+            foreach (Transform cube in TetrominoData.GetCubes(activePiece.Root.transform))
+            {
+                orderLabelRenderer.RemoveLabelForTarget(cube);
+            }
+        }
+
+        ghost?.Hide();
+        Destroy(activePiece.Root);
+        activePiece = null;
     }
 
     private bool TryMove(Vector2Int direction)
@@ -608,6 +669,7 @@ public class Game2Tetris : MonoBehaviour
     {
         GUI.Label(new Rect(20, 20, 400, 30), $"Score: {score}  Lines: {clearedLines}");
         if (pathResult != null) GUI.Label(new Rect(20, 50, 400, 30), $"Path: {pathResult.ReachableCells.Count} cells");
+        DrawHoldAndPreviewGui();
         if (gameClear) GUI.Label(new Rect(20, 80, 400, 30), "GAME CLEAR");
         if (!gameOver)
         {
@@ -620,6 +682,91 @@ public class Game2Tetris : MonoBehaviour
             alignment = TextAnchor.MiddleCenter,
             normal = { textColor = Color.white }
         };
-        GUI.Label(new Rect(0, Screen.height / 2f - 60f, Screen.width, 120f), $"GAME OVER\n{restartKey} 키를 눌러 재시작", gameOverStyle);
+        GUI.Label(new Rect(0, Screen.height / 2f - 60f, Screen.width, 120f), $"GAME OVER\nPress {restartKey} to Restart", gameOverStyle);
+    }
+
+    private void DrawHoldAndPreviewGui()
+    {
+        if (tetrominoes == null || sevenBag == null)
+        {
+            return;
+        }
+
+        float panelWidth = 170f;
+        float x = Screen.width - panelWidth - 20f;
+        float y = 20f;
+
+        GUIStyle labelStyle = new GUIStyle(GUI.skin.label)
+        {
+            fontSize = 18,
+            normal = { textColor = Color.white }
+        };
+
+        GUI.Label(new Rect(x, y, panelWidth, 24f), $"HOLD ({holdKey})", labelStyle);
+        DrawPiecePreview(holdPieceType, x + 12f, y + 30f, 22f);
+
+        GUI.Label(new Rect(x, y + 125f, panelWidth, 24f), "NEXT", labelStyle);
+        DrawPiecePreview(sevenBag.Peek(0), x + 12f, y + 155f, 20f);
+        DrawPiecePreview(sevenBag.Peek(1), x + 12f, y + 245f, 20f);
+    }
+
+    private void DrawPiecePreview(int type, float x, float y, float cellSize)
+    {
+        if (type < 0 || type >= tetrominoes.Length)
+        {
+            GUI.Label(new Rect(x, y + cellSize, 120f, 24f), "Empty");
+            return;
+        }
+
+        TetrominoData data = tetrominoes[type];
+        GetPieceBounds(data, out int minX, out int maxX, out int minY, out int maxY);
+
+        float width = (maxX - minX + 1) * cellSize;
+        float height = (maxY - minY + 1) * cellSize;
+        float offsetX = (100f - width) * 0.5f;
+        float offsetY = (70f - height) * 0.5f;
+
+        Color previousColor = GUI.color;
+        GUI.color = GetPreviewColor(type);
+
+        foreach (Vector2Int cell in data.Cells)
+        {
+            float drawX = x + offsetX + (cell.x - minX) * cellSize;
+            float drawY = y + offsetY + (maxY - cell.y) * cellSize;
+            GUI.DrawTexture(new Rect(drawX, drawY, cellSize - 2f, cellSize - 2f), Texture2D.whiteTexture);
+        }
+
+        GUI.color = previousColor;
+    }
+
+    private static void GetPieceBounds(TetrominoData data, out int minX, out int maxX, out int minY, out int maxY)
+    {
+        minX = int.MaxValue;
+        maxX = int.MinValue;
+        minY = int.MaxValue;
+        maxY = int.MinValue;
+
+        foreach (Vector2Int cell in data.Cells)
+        {
+            minX = Mathf.Min(minX, cell.x);
+            maxX = Mathf.Max(maxX, cell.x);
+            minY = Mathf.Min(minY, cell.y);
+            maxY = Mathf.Max(maxY, cell.y);
+        }
+    }
+
+    private static Color GetPreviewColor(int type)
+    {
+        return type switch
+        {
+            0 => Color.cyan,
+            1 => Color.yellow,
+            2 => new Color(0.65f, 0.2f, 1f),
+            3 => Color.green,
+            4 => Color.red,
+            5 => Color.blue,
+            6 => new Color(1f, 0.55f, 0f),
+            _ => Color.white
+        };
     }
 }
