@@ -8,6 +8,10 @@ public class SoundManager : MonoBehaviour
     [SerializeField] private AudioSource bgmSource;
     [SerializeField] private AudioSource effectSource;
 
+    [Header("Audio Clips")]
+    [SerializeField] private AudioClip bgmClip;
+    [SerializeField] private AudioClip effectClip;
+
     [Header("Volume")]
     [SerializeField, Range(0, 10)] private int bgmVolume = 10;
     [SerializeField, Range(0, 10)] private int effectVolume = 10;
@@ -28,6 +32,7 @@ public class SoundManager : MonoBehaviour
 
         SetupAudioSources();
         ApplyVolumes();
+        PlayBgmOnAwake();
     }
 
     private void OnValidate()
@@ -85,6 +90,11 @@ public class SoundManager : MonoBehaviour
         }
     }
 
+    public void PlayEffect()
+    {
+        PlayEffect(effectClip);
+    }
+
     private void SetupAudioSources()
     {
         if (bgmSource == null)
@@ -111,6 +121,14 @@ public class SoundManager : MonoBehaviour
         if (effectSource != null)
         {
             effectSource.volume = effectVolume / 10f;
+        }
+    }
+
+    private void PlayBgmOnAwake()
+    {
+        if (bgmClip != null)
+        {
+            PlayBgm(bgmClip);
         }
     }
 }

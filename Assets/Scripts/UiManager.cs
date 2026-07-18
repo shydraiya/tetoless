@@ -37,4 +37,12 @@ public class UiManager : MonoBehaviour
             panel.SetActive(!panel.activeSelf);
         }
     }
+
+    public void OpenPanel()
+    {
+        if(panel != null)
+        {
+            panel.SetActive(true);
+        }
+    }
 }

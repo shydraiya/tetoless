@@ -48,6 +48,7 @@ public sealed class TetrisPathRules
             visited[startCell.x, startCell.y] = true;
             queue.Enqueue(startCell);
             result.ReachableCells.Add(startCell);
+            AddDangerZone(startCell, result);
             result.Edges.Add(new TetrisPathEdge(startPoint, startCell));
             AddEndPointEdges(startCell, result);
         }
@@ -70,11 +71,13 @@ public sealed class TetrisPathRules
                 visited[next.x, next.y] = true;
                 queue.Enqueue(next);
                 result.ReachableCells.Add(next);
+                AddDangerZone(next, result);
 
                 AddEndPointEdges(next, result);
             }
         }
 
+        result.ReachedEndPoint = endPoints.Count > 0 && result.ReachedEndPoints.Count == endPoints.Count;
         return result;
     }
 
@@ -87,8 +90,17 @@ public sealed class TetrisPathRules
                 continue;
             }
 
-            result.ReachedEndPoint = true;
+            result.ReachedEndPoints.Add(endPoint);
             result.Edges.Add(new TetrisPathEdge(cell, endPoint));
+        }
+    }
+
+    private void AddDangerZone(Vector2Int cell, TetrisPathResult result)
+    {
+        if (IsDangerZone(cell))
+        {
+            result.ReachedDangerZones.Add(cell);
+            result.ReachedDangerZone = true;
         }
     }
 
@@ -98,7 +110,7 @@ public sealed class TetrisPathRules
         foreach (Vector2Int direction in Directions)
         {
             Vector2Int candidate = point + direction;
-            if (!IsDangerZone(candidate) && board.TryGetCell(candidate, out _))
+            if (board.TryGetCell(candidate, out _))
             {
                 cells.Add(candidate);
             }
@@ -118,11 +130,6 @@ public sealed class TetrisPathRules
         foreach (Vector2Int direction in Directions)
         {
             Vector2Int candidatePosition = position + direction;
-            if (IsDangerZone(candidatePosition))
-            {
-                continue;
-            }
-
             if (!board.TryGetCell(candidatePosition, out TetrisBoardCell candidate))
             {
                 continue;
@@ -192,7 +199,10 @@ public sealed class TetrisPathResult
 {
     public readonly List<Vector2Int> ReachableCells = new List<Vector2Int>();
     public readonly List<TetrisPathEdge> Edges = new List<TetrisPathEdge>();
+    public readonly HashSet<Vector2Int> ReachedEndPoints = new HashSet<Vector2Int>();
+    public readonly HashSet<Vector2Int> ReachedDangerZones = new HashSet<Vector2Int>();
     public bool ReachedEndPoint;
+    public bool ReachedDangerZone;
 }
 
 public readonly struct TetrisPathEdge

@@ -1,6 +1,7 @@
 using System.Collections;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.SceneManagement;
 
 public class Game2Tetris : MonoBehaviour
 {
@@ -38,6 +39,7 @@ public class Game2Tetris : MonoBehaviour
     [SerializeField] private Key clockwiseKey = Key.X;
     [SerializeField] private Key counterClockwiseKey = Key.Z;
     [SerializeField] private Key debugStageClearKey = Key.Backquote;
+    [SerializeField] private Key restartKey = Key.R;
 
     [Header("Ghost Piece")]
     [SerializeField] private Color ghostColor = new Color(1f, 1f, 1f, 0.25f);
@@ -172,7 +174,22 @@ public class Game2Tetris : MonoBehaviour
     private void Update()
     {
         Keyboard keyboard = Keyboard.current;
-        if (keyboard == null || mapIntroPlaying || gameOver || gameClear)
+        if (keyboard == null || mapIntroPlaying)
+        {
+            return;
+        }
+
+        if (gameOver)
+        {
+            if (keyboard[restartKey].wasPressedThisFrame)
+            {
+                RestartScene();
+            }
+
+            return;
+        }
+
+        if (gameClear)
         {
             return;
         }
@@ -361,7 +378,6 @@ public class Game2Tetris : MonoBehaviour
 
     private void LockPiece()
     {
-        bool lockedOnDangerZone = IsActivePieceOnDangerZone();
         if (!board.Lock(CurrentData, activePiece))
         {
             gameOver = true;
@@ -378,13 +394,8 @@ public class Game2Tetris : MonoBehaviour
         EvaluatePath();
         clearedLines += lines;
         score += GetLineScore(lines);
-        if (lockedOnDangerZone)
-        {
-            gameOver = true;
-            return;
-        }
 
-        if (gameClear)
+        if (gameOver || gameClear)
         {
             return;
         }
@@ -440,7 +451,19 @@ public class Game2Tetris : MonoBehaviour
     {
         pathResult = pathRules?.Evaluate();
         pathLineRenderer?.Draw(pathResult);
-        if (pathResult != null && pathResult.ReachedEndPoint)
+        if (pathResult == null)
+        {
+            return;
+        }
+
+        if (pathResult.ReachedDangerZone)
+        {
+            gameOver = true;
+            ghost?.Hide();
+            return;
+        }
+
+        if (pathResult.ReachedEndPoint)
         {
             TriggerGameClear();
         }
@@ -481,28 +504,6 @@ public class Game2Tetris : MonoBehaviour
         return clamped;
     }
 
-    private bool IsActivePieceOnDangerZone()
-    {
-        if (dangerZones == null)
-        {
-            return false;
-        }
-
-        foreach (Vector2Int source in CurrentData.Cells)
-        {
-            Vector2Int cell = activePiece.Position + TetrominoData.RotateCell(source, activePiece.Rotation);
-            for (int i = 0; i < dangerZones.Length; i++)
-            {
-                if (cell == dangerZones[i])
-                {
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
-
     private void UpdatePieceView()
     {
         activePiece.Root.transform.position = board.CellToWorld(activePiece.Position);
@@ -526,6 +527,12 @@ public class Game2Tetris : MonoBehaviour
         return lines switch { 1 => 100, 2 => 300, 3 => 500, 4 => 800, _ => 0 };
     }
 
+    private void RestartScene()
+    {
+        Scene currentScene = SceneManager.GetActiveScene();
+        SceneManager.LoadScene(currentScene.name);
+    }
+
     private void OnDestroy()
     {
         ghost?.Destroy();
@@ -540,6 +547,17 @@ public class Game2Tetris : MonoBehaviour
         GUI.Label(new Rect(20, 20, 400, 30), $"Score: {score}  Lines: {clearedLines}");
         if (pathResult != null) GUI.Label(new Rect(20, 50, 400, 30), $"Path: {pathResult.ReachableCells.Count} cells");
         if (gameClear) GUI.Label(new Rect(20, 80, 400, 30), "GAME CLEAR");
-        if (gameOver) GUI.Label(new Rect(20, 110, 400, 30), "GAME OVER");
+        if (!gameOver)
+        {
+            return;
+        }
+
+        GUIStyle gameOverStyle = new GUIStyle(GUI.skin.label)
+        {
+            fontSize = 42,
+            alignment = TextAnchor.MiddleCenter,
+            normal = { textColor = Color.white }
+        };
+        GUI.Label(new Rect(0, Screen.height / 2f - 60f, Screen.width, 120f), $"GAME OVER\n{restartKey} 키를 눌러 재시작", gameOverStyle);
     }
 }
