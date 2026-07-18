@@ -1,4 +1,5 @@
 using System.Collections;
+using TMPro;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
@@ -39,6 +40,23 @@ public class Game2Tetris : MonoBehaviour
     [SerializeField, Min(1)] private int garbageLinesPerRise = 4;
     [SerializeField, Min(1)] private int garbageRowsPerHoleColumn = 2;
     [SerializeField, Min(0.1f)] private float garbageRiseInterval = 30f;
+    [SerializeField] private TMP_Text garbageTimerText;
+
+    [Header("Gimmick 1")]
+    [SerializeField] private bool enableGimmick1;
+    [SerializeField, Min(1)] private int gimmick1SpawnInterval = 15;
+    [SerializeField, Min(1)] private int gimmick1ClearRows = 5;
+    [SerializeField] private GameObject gimmick1EffectPrefab;
+
+    [Header("Gimmick 2")]
+    [SerializeField] private bool enableGimmick2;
+    [SerializeField, Min(1)] private int gimmick2SpawnInterval = 20;
+    [SerializeField, Min(1)] private int gimmick2ClearColumns = 2;
+    [SerializeField] private GameObject gimmick2EffectPrefab;
+
+    [Header("Gimmick Warning")]
+    [SerializeField, Min(1)] private int gimmickWarningSpawnLead = 2;
+    [SerializeField, Min(0.1f)] private float gimmickWarningBlinkSpeed = 4f;
 
     [Header("Controls")]
     [SerializeField] private Key moveLeftKey = Key.LeftArrow;
@@ -123,12 +141,14 @@ public class Game2Tetris : MonoBehaviour
     private int score;
     private int clearedLines;
     private int nextLockedBlockId = 1;
+    private int spawnedPieceCount;
     private int holdPieceType = -1;
     private bool gameOver;
     private bool gameClear;
     private bool mapIntroPlaying;
     private bool loadingNextStage;
     private bool canHold = true;
+    private Color garbageTimerDefaultColor = Color.white;
 
     private void Start()
     {
@@ -143,6 +163,7 @@ public class Game2Tetris : MonoBehaviour
             yield break;
         }
 
+        CacheGarbageTimerColor();
         CreateTetrominoes();
         board = new TetrisBoard(boardWidth, boardDepth, cellSize, blockHeight, plane);
         AlignCameraToBoard();
@@ -211,6 +232,7 @@ public class Game2Tetris : MonoBehaviour
         HandleInput(keyboard);
         HandleAutomaticFall(keyboard);
         HandleGarbageRise();
+        UpdateGarbageTimerText();
     }
 
     private void HandleInput(Keyboard keyboard)
@@ -388,6 +410,43 @@ public class Game2Tetris : MonoBehaviour
 
         ghost.Create(data, cellSize);
         UpdateGhost();
+
+        if (resetHold)
+        {
+            HandleSpawnGimmicks();
+        }
+    }
+
+    private void UpdateGarbageTimerText()
+    {
+        if (garbageTimerText == null)
+        {
+            return;
+        }
+
+        if (!garbageTimerText.gameObject.activeSelf)
+        {
+            garbageTimerText.gameObject.SetActive(true);
+        }
+
+        if (!enableGarbageLines || garbageLineManager == null || gameOver || gameClear)
+        {
+            garbageTimerText.color = garbageTimerDefaultColor;
+            garbageTimerText.text = "--:--";
+            return;
+        }
+
+        int seconds = Mathf.CeilToInt(garbageLineManager.RemainingTime);
+        garbageTimerText.color = seconds < 10 ? Color.red : garbageTimerDefaultColor;
+        garbageTimerText.text = $"{seconds}";
+    }
+
+    private void CacheGarbageTimerColor()
+    {
+        if (garbageTimerText != null)
+        {
+            garbageTimerDefaultColor = garbageTimerText.color;
+        }
     }
 
     private void SpawnPiece(int type)
@@ -502,6 +561,75 @@ public class Game2Tetris : MonoBehaviour
         }
 
         SpawnPiece();
+    }
+
+    private void HandleSpawnGimmicks()
+    {
+        spawnedPieceCount++;
+
+        if (enableGimmick1 && spawnedPieceCount % gimmick1SpawnInterval == 0)
+        {
+            TriggerGimmick1();
+        }
+
+        if (gameOver || gameClear)
+        {
+            return;
+        }
+
+        if (enableGimmick2 && spawnedPieceCount % gimmick2SpawnInterval == 0)
+        {
+            TriggerGimmick2();
+        }
+    }
+
+    private void TriggerGimmick1()
+    {
+        System.Action<Transform> removeLabel = orderLabelRenderer == null ? null : orderLabelRenderer.RemoveLabelForTarget;
+        int cleared = board.ClearBottomRows(
+            gimmick1ClearRows,
+            removeLabel,
+            cell => SpawnGimmickEffect(gimmick1EffectPrefab, cell));
+
+        if (cleared > 0)
+        {
+            RefreshAfterBoardGimmick();
+        }
+    }
+
+    private void TriggerGimmick2()
+    {
+        int clearColumns = Mathf.Clamp(gimmick2ClearColumns, 1, board.Width);
+        int startColumn = Random.Range(0, board.Width - clearColumns + 1);
+        System.Action<Transform> removeLabel = orderLabelRenderer == null ? null : orderLabelRenderer.RemoveLabelForTarget;
+        int cleared = board.ClearColumns(
+            startColumn,
+            clearColumns,
+            removeLabel,
+            cell => SpawnGimmickEffect(gimmick2EffectPrefab, cell));
+
+        if (cleared > 0)
+        {
+            RefreshAfterBoardGimmick();
+        }
+    }
+
+    private void RefreshAfterBoardGimmick()
+    {
+        orderLabelRenderer?.Refresh();
+        EvaluatePath();
+        UpdateGhost();
+    }
+
+    private void SpawnGimmickEffect(GameObject effectPrefab, Vector2Int cell)
+    {
+        if (effectPrefab == null)
+        {
+            return;
+        }
+
+        GameObject effect = Instantiate(effectPrefab, board.CellToWorld(cell), Quaternion.identity);
+        Destroy(effect, 3f);
     }
 
     private void SetupGarbageLines()
@@ -670,6 +798,7 @@ public class Game2Tetris : MonoBehaviour
         GUI.Label(new Rect(20, 20, 400, 30), $"Score: {score}  Lines: {clearedLines}");
         if (pathResult != null) GUI.Label(new Rect(20, 50, 400, 30), $"Path: {pathResult.ReachableCells.Count} cells");
         DrawHoldAndPreviewGui();
+        DrawGimmickWarnings();
         if (gameClear) GUI.Label(new Rect(20, 80, 400, 30), "GAME CLEAR");
         if (!gameOver)
         {
@@ -683,6 +812,55 @@ public class Game2Tetris : MonoBehaviour
             normal = { textColor = Color.white }
         };
         GUI.Label(new Rect(0, Screen.height / 2f - 60f, Screen.width, 120f), $"GAME OVER\nPress {restartKey} to Restart", gameOverStyle);
+    }
+
+    private void DrawGimmickWarnings()
+    {
+        if (gameOver || gameClear)
+        {
+            return;
+        }
+
+        float y = Screen.height * 0.5f - 55f;
+        if (ShouldShowGimmickWarning(enableGimmick1, gimmick1SpawnInterval))
+        {
+            DrawGimmickWarning("HORIZONTAL SHOCK DETECTED", y);
+            y += 52f;
+        }
+
+        if (ShouldShowGimmickWarning(enableGimmick2, gimmick2SpawnInterval))
+        {
+            DrawGimmickWarning("VERTICAL SHOCK DETECTED", y);
+        }
+    }
+
+    private bool ShouldShowGimmickWarning(bool enabled, int interval)
+    {
+        if (!enabled || spawnedPieceCount <= 0)
+        {
+            return false;
+        }
+
+        int remainingSpawns = interval - spawnedPieceCount % interval;
+        return remainingSpawns > 0 && remainingSpawns <= gimmickWarningSpawnLead;
+    }
+
+    private void DrawGimmickWarning(string message, float y)
+    {
+        float alpha = Mathf.Lerp(0.2f, 0.85f, (Mathf.Sin(Time.time * gimmickWarningBlinkSpeed) + 1f) * 0.5f);
+        Color previousColor = GUI.color;
+        GUI.color = new Color(1f, 0.18f, 0.08f, alpha);
+
+        GUIStyle warningStyle = new GUIStyle(GUI.skin.label)
+        {
+            fontSize = 34,
+            alignment = TextAnchor.MiddleCenter,
+            fontStyle = FontStyle.Bold,
+            normal = { textColor = GUI.color }
+        };
+
+        GUI.Label(new Rect(0, y, Screen.width, 46f), message, warningStyle);
+        GUI.color = previousColor;
     }
 
     private void DrawHoldAndPreviewGui()
