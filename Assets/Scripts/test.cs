@@ -1,6 +1,9 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.SceneManagement;
 
 public class test : MonoBehaviour
 {
@@ -9,12 +12,14 @@ public class test : MonoBehaviour
     {
         public string name;
         public Color color;
+        public int[] orderNumbers;
         public Vector2Int[] cells;
 
-        public BlockData(string name, Color color, params Vector2Int[] cells)
+        public BlockData(string name, Color color, int[] orderNumbers, params Vector2Int[] cells)
         {
             this.name = name;
             this.color = color;
+            this.orderNumbers = orderNumbers;
             this.cells = cells;
         }
     }
@@ -27,18 +32,69 @@ public class test : MonoBehaviour
         public GameObject[] views;
     }
 
+    private class BoardCell
+    {
+        public GameObject view;
+        public int blockId;
+        public int order;
+        public Vector2Int exitDirection;
+    }
+
     [Header("Board")]
     [SerializeField] private int width = 10;
     [SerializeField] private int height = 20;
     [SerializeField, Min(0.05f)] private float fallInterval = 0.7f;
     [SerializeField, Min(0.01f)] private float fastFallInterval = 0.05f;
 
+    [Header("Rules")]
+    [SerializeField] private bool enableTetrisCondition = true;
+    [SerializeField] private string nextStageSceneName;
+    [SerializeField, Min(0f)] private float nextStageDelay = 1f;
+
+    [Header("Map Intro")]
+    [SerializeField] private bool playMapIntro = true;
+    [SerializeField, Min(0.05f)] private float mapIntroInterval = 1f;
+    [SerializeField] private GameObject mapRevealEffectPrefab;
+    [SerializeField, Min(0.1f)] private float mapRevealEffectLifetime = 3f;
+
+    [Header("Stage Background")]
+    [SerializeField] private GameObject stageBackgroundPrefab;
+    [SerializeField] private bool fitCameraToBackgroundFrame = true;
+    [SerializeField] private Vector2 boardFrameViewportSize = new Vector2(0.34f, 0.75f);
+
+    [Header("Path")]
+    [SerializeField, Range(0.05f, 1f)] private float pathLineThickness = 0.3f;
+    [SerializeField] private Color pathLineColor = Color.white;
+
+    [Header("Clear Targets")]
+    [SerializeField]
+    private Vector2Int[] clearTargetPositions =
+    {
+        new Vector2Int(5, 17)
+    };
+    [SerializeField] private Color clearTargetColor = new Color(0f, 1f, 0f, 0.45f);
+
+    [Header("Danger Zones")]
+    [SerializeField]
+    private Vector2Int[] dangerZonePositions =
+    {
+        new Vector2Int(4, 10),
+        new Vector2Int(5, 10),
+        new Vector2Int(6, 10)
+    };
+    [SerializeField] private GameObject dangerZoneEffectPrefab;
+    [SerializeField, Min(0.1f)] private float dangerZoneEffectScale = 1f;
+
+    [Header("Debug")]
+    [SerializeField] private bool showBlockOrderNumbers = true;
+    [SerializeField] private Key debugStageClearKey = Key.Backquote;
+
     [Header("Controls")]
     [SerializeField] private Key clockwiseRotationKey = Key.X;
     [SerializeField] private Key counterClockwiseRotationKey = Key.Z;
 
     private BlockData[] blockData;
-    private GameObject[,] board;
+    private BoardCell[,] board;
     private ActiveBlock activeBlock;
     private Transform boardRoot;
     private Sprite blockSprite;
@@ -48,19 +104,40 @@ public class test : MonoBehaviour
     private bool gameOver;
     private int[] blockBag;
     private int blockBagIndex;
+    private int nextLockedBlockId = 1;
+    private bool gameClear;
+    private Transform pathRoot;
+    private GameObject[] clearTargetViews;
+    private GameObject[] dangerZoneViews;
+    private Vector2Int startPosition;
+    private GameObject stageBackgroundView;
+    private bool mapIntroPlaying;
+    private bool loadingNextStage;
+    private readonly List<GameObject> leftWallViews = new List<GameObject>();
+    private readonly List<GameObject> rightWallViews = new List<GameObject>();
+    private readonly List<GameObject> floorViews = new List<GameObject>();
 
     private void Start()
     {
         CreateBlockData();
         CreateBlockSprite();
         SetupBoard();
+        SetupPlayerStart();
+        UpdateClearTargetView();
+        UpdateDangerZoneViews();
         SetupCamera();
-        SpawnBlock();
+        SetupStageBackground();
+        StartCoroutine(PlayMapIntroThenStart());
     }
 
     private void Update()
     {
-        if (gameOver)
+        if (mapIntroPlaying)
+        {
+            return;
+        }
+
+        if (gameOver || gameClear)
         {
             if (Keyboard.current != null && Keyboard.current.rKey.wasPressedThisFrame)
             {
@@ -73,6 +150,12 @@ public class test : MonoBehaviour
         Keyboard keyboard = Keyboard.current;
         if (keyboard == null)
         {
+            return;
+        }
+
+        if (keyboard[debugStageClearKey].wasPressedThisFrame)
+        {
+            SetGameClear();
             return;
         }
 
@@ -121,45 +204,48 @@ public class test : MonoBehaviour
     {
         blockData = new[]
         {
-            new BlockData("I", Color.cyan,
+            new BlockData("I", Color.cyan, new[] { 1, 2, 3, 4 },
                 new Vector2Int(-1, 0), new Vector2Int(0, 0),
                 new Vector2Int(1, 0), new Vector2Int(2, 0)),
-            new BlockData("O", Color.yellow,
-                new Vector2Int(0, 0), new Vector2Int(1, 0),
-                new Vector2Int(0, 1), new Vector2Int(1, 1)),
-            new BlockData("T", new Color(0.65f, 0.2f, 0.9f),
+            new BlockData("O", Color.yellow, new[] { 2, 3, 4, 3 },
+                new Vector2Int(0, 1), new Vector2Int(1, 1),
+                new Vector2Int(1, 0), new Vector2Int(0, 0)),
+            new BlockData("T", new Color(0.65f, 0.2f, 0.9f), new[] { 2, 3, 2, 4 },
                 new Vector2Int(-1, 0), new Vector2Int(0, 0),
                 new Vector2Int(1, 0), new Vector2Int(0, 1)),
-            new BlockData("S", Color.green,
-                new Vector2Int(-1, 0), new Vector2Int(0, 0),
-                new Vector2Int(0, 1), new Vector2Int(1, 1)),
-            new BlockData("Z", Color.red,
+            new BlockData("S", Color.green, new[] { 3, 4, 1, 2 },
+                new Vector2Int(0, 1), new Vector2Int(1, 1),
+                new Vector2Int(-1, 0), new Vector2Int(0, 0)),
+            new BlockData("Z", Color.red, new[] { 1, 2, 3, 4 },
                 new Vector2Int(-1, 1), new Vector2Int(0, 1),
                 new Vector2Int(0, 0), new Vector2Int(1, 0)),
-            new BlockData("J", Color.blue,
+            new BlockData("J", new Color(1f, 0.25f, 0.65f), new[] { 1, 2, 3, 4 },
                 new Vector2Int(-1, 1), new Vector2Int(-1, 0),
                 new Vector2Int(0, 0), new Vector2Int(1, 0)),
-            new BlockData("L", new Color(1f, 0.5f, 0f),
-                new Vector2Int(1, 1), new Vector2Int(-1, 0),
-                new Vector2Int(0, 0), new Vector2Int(1, 0))
+            new BlockData("L", new Color(1f, 0.5f, 0f), new[] { 1, 2, 3, 4 },
+                new Vector2Int(1, 1), new Vector2Int(1, 0),
+                new Vector2Int(0, 0), new Vector2Int(-1, 0))
         };
     }
 
     private void SetupBoard()
     {
-        board = new GameObject[width, height];
+        board = new BoardCell[width, height];
         boardRoot = new GameObject("Tetris Board").transform;
         boardRoot.SetParent(transform, false);
+        leftWallViews.Clear();
+        rightWallViews.Clear();
+        floorViews.Clear();
 
         for (int y = -1; y <= height; y++)
         {
-            CreateBorderBlock(-1, y);
-            CreateBorderBlock(width, y);
+            leftWallViews.Add(CreateBorderBlock(-1, y));
+            rightWallViews.Add(CreateBorderBlock(width, y));
         }
 
         for (int x = 0; x < width; x++)
         {
-            CreateBorderBlock(x, -1);
+            floorViews.Add(CreateBorderBlock(x, -1));
         }
     }
 
@@ -172,10 +258,67 @@ public class test : MonoBehaviour
         }
 
         mainCamera.orthographic = true;
-        mainCamera.orthographicSize = 12f;
+        mainCamera.orthographicSize = GetCameraOrthographicSize(mainCamera);
         mainCamera.transform.position = new Vector3((width - 1) * 0.5f, (height - 1) * 0.5f, -10f);
         mainCamera.transform.rotation = Quaternion.identity;
         mainCamera.backgroundColor = new Color(0.04f, 0.04f, 0.08f);
+    }
+
+    private float GetCameraOrthographicSize(Camera mainCamera)
+    {
+        if (!fitCameraToBackgroundFrame || stageBackgroundPrefab == null)
+        {
+            return 12f;
+        }
+
+        Vector2 frameSize = new Vector2(
+            Mathf.Max(0.05f, boardFrameViewportSize.x),
+            Mathf.Max(0.05f, boardFrameViewportSize.y));
+        float boardWorldWidth = width + 2f;
+        float boardWorldHeight = height + 2f;
+        float sizeByHeight = boardWorldHeight / (2f * frameSize.y);
+        float sizeByWidth = boardWorldWidth / (2f * frameSize.x * mainCamera.aspect);
+        return Mathf.Max(sizeByHeight, sizeByWidth);
+    }
+
+    private void SetupStageBackground()
+    {
+        if (stageBackgroundPrefab == null)
+        {
+            return;
+        }
+
+        if (stageBackgroundView != null)
+        {
+            Destroy(stageBackgroundView);
+        }
+
+        Camera mainCamera = Camera.main;
+        if (mainCamera == null)
+        {
+            return;
+        }
+
+        stageBackgroundView = Instantiate(stageBackgroundPrefab, transform);
+        stageBackgroundView.name = "Stage Background";
+
+        SpriteRenderer renderer = stageBackgroundView.GetComponentInChildren<SpriteRenderer>();
+        if (renderer == null || renderer.sprite == null)
+        {
+            return;
+        }
+
+        float cameraHeight = mainCamera.orthographicSize * 2f;
+        float cameraWidth = cameraHeight * mainCamera.aspect;
+        Vector2 spriteSize = renderer.sprite.bounds.size;
+        float scale = Mathf.Max(cameraWidth / spriteSize.x, cameraHeight / spriteSize.y);
+
+        stageBackgroundView.transform.position = new Vector3(
+            mainCamera.transform.position.x,
+            mainCamera.transform.position.y,
+            6f);
+        stageBackgroundView.transform.localScale = Vector3.one * scale;
+        renderer.sortingOrder = -20;
     }
 
     private void CreateBlockSprite()
@@ -187,11 +330,13 @@ public class test : MonoBehaviour
         blockSprite = Sprite.Create(texture, new Rect(0, 0, 1, 1), Vector2.one * 0.5f, 1f);
     }
 
-    private void CreateBorderBlock(int x, int y)
+    private GameObject CreateBorderBlock(int x, int y)
     {
         GameObject border = CreateView(new Color(0.2f, 0.2f, 0.25f), "Border");
         border.transform.SetParent(boardRoot, false);
         border.transform.localPosition = new Vector3(x, y, 0f);
+        border.SetActive(false);
+        return border;
     }
 
     private GameObject CreateView(Color color, string objectName)
@@ -203,6 +348,189 @@ public class test : MonoBehaviour
         renderer.sortingOrder = 1;
         view.transform.localScale = Vector3.one * 0.92f;
         return view;
+    }
+
+    private void SetupPlayerStart()
+    {
+        startPosition = new Vector2Int(width / 2, 0);
+
+        GameObject startBlock = CreateView(new Color(0.55f, 0.55f, 0.6f), "Player Start Block");
+        startBlock.transform.SetParent(boardRoot, false);
+        startBlock.transform.localPosition = new Vector3(startPosition.x, startPosition.y, 0f);
+        startBlock.SetActive(false);
+        AddOrderLabel(startBlock, 1);
+
+        board[startPosition.x, startPosition.y] = new BoardCell
+        {
+            view = startBlock,
+            blockId = 0,
+            order = 1,
+            exitDirection = Vector2Int.up
+        };
+    }
+
+    private void UpdateClearTargetView()
+    {
+        if (clearTargetViews != null)
+        {
+            for (int i = 0; i < clearTargetViews.Length; i++)
+            {
+                if (clearTargetViews[i] != null)
+                {
+                    Destroy(clearTargetViews[i]);
+                }
+            }
+        }
+
+        clearTargetViews = new GameObject[clearTargetPositions.Length];
+        for (int i = 0; i < clearTargetPositions.Length; i++)
+        {
+            Vector2Int clearTarget = ClampToBoard(clearTargetPositions[i]);
+            clearTargetPositions[i] = clearTarget;
+
+            GameObject view = CreateView(clearTargetColor, "Clear Target");
+            view.transform.SetParent(boardRoot, false);
+            view.transform.localScale = Vector3.one * 0.98f;
+            view.transform.localPosition = new Vector3(clearTarget.x, clearTarget.y, -0.4f);
+            view.SetActive(false);
+
+            SpriteRenderer renderer = view.GetComponent<SpriteRenderer>();
+            renderer.sortingOrder = 2;
+            clearTargetViews[i] = view;
+        }
+    }
+
+    private void UpdateDangerZoneViews()
+    {
+        if (dangerZoneViews != null)
+        {
+            for (int i = 0; i < dangerZoneViews.Length; i++)
+            {
+                if (dangerZoneViews[i] != null)
+                {
+                    Destroy(dangerZoneViews[i]);
+                }
+            }
+        }
+
+        dangerZoneViews = new GameObject[dangerZonePositions.Length];
+        for (int i = 0; i < dangerZonePositions.Length; i++)
+        {
+            Vector2Int dangerZone = ClampToBoard(dangerZonePositions[i]);
+            dangerZonePositions[i] = dangerZone;
+
+            GameObject view = CreateDangerZoneView();
+            view.transform.SetParent(boardRoot, false);
+            view.transform.localScale = Vector3.one * dangerZoneEffectScale;
+            view.transform.localPosition = new Vector3(dangerZone.x, dangerZone.y, -0.45f);
+            view.SetActive(false);
+
+            SpriteRenderer renderer = view.GetComponentInChildren<SpriteRenderer>();
+            if (renderer != null)
+            {
+                renderer.sortingOrder = 2;
+            }
+
+            dangerZoneViews[i] = view;
+        }
+    }
+
+    private GameObject CreateDangerZoneView()
+    {
+        if (dangerZoneEffectPrefab != null)
+        {
+            GameObject effect = Instantiate(dangerZoneEffectPrefab);
+            effect.name = "Danger Zone Fire";
+            return effect;
+        }
+
+        GameObject fallback = CreateView(new Color(1f, 0.35f, 0f, 0.7f), "Danger Zone");
+        fallback.transform.localScale = Vector3.one * 0.98f;
+        return fallback;
+    }
+
+    private IEnumerator PlayMapIntroThenStart()
+    {
+        mapIntroPlaying = true;
+
+        if (!playMapIntro)
+        {
+            RevealInstantly(leftWallViews);
+            RevealInstantly(rightWallViews);
+            RevealInstantly(floorViews);
+            RevealInstantly(board[startPosition.x, startPosition.y].view);
+            RevealInstantly(clearTargetViews);
+            RevealInstantly(dangerZoneViews);
+        }
+        else
+        {
+            yield return RevealStep(leftWallViews);
+            yield return RevealStep(rightWallViews);
+            yield return RevealStep(floorViews);
+            yield return RevealStep(board[startPosition.x, startPosition.y].view);
+            yield return RevealStep(clearTargetViews);
+            yield return RevealStep(dangerZoneViews);
+        }
+
+        RefreshPathLines();
+        SpawnBlock();
+        mapIntroPlaying = false;
+    }
+
+    private IEnumerator RevealStep(IReadOnlyList<GameObject> views)
+    {
+        RevealInstantly(views);
+        yield return new WaitForSeconds(mapIntroInterval);
+    }
+
+    private IEnumerator RevealStep(GameObject view)
+    {
+        RevealInstantly(view);
+        yield return new WaitForSeconds(mapIntroInterval);
+    }
+
+    private void RevealInstantly(IReadOnlyList<GameObject> views)
+    {
+        for (int i = 0; i < views.Count; i++)
+        {
+            RevealInstantly(views[i]);
+        }
+    }
+
+    private void RevealInstantly(GameObject[] views)
+    {
+        if (views == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < views.Length; i++)
+        {
+            RevealInstantly(views[i]);
+        }
+    }
+
+    private void RevealInstantly(GameObject view)
+    {
+        if (view == null)
+        {
+            return;
+        }
+
+        view.SetActive(true);
+        PlayMapRevealEffect(view.transform.localPosition);
+    }
+
+    private void PlayMapRevealEffect(Vector3 localPosition)
+    {
+        if (mapRevealEffectPrefab == null)
+        {
+            return;
+        }
+
+        Vector3 worldPosition = boardRoot.TransformPoint(new Vector3(localPosition.x, localPosition.y, -1f));
+        GameObject effect = Instantiate(mapRevealEffectPrefab, worldPosition, Quaternion.identity);
+        Destroy(effect, mapRevealEffectLifetime);
     }
 
     private void SpawnBlock()
@@ -220,6 +548,7 @@ public class test : MonoBehaviour
         {
             next.views[i] = CreateView(blockData[index].color, blockData[index].name);
             next.views[i].transform.SetParent(boardRoot, false);
+            AddOrderLabel(next.views[i], blockData[index].orderNumbers[i]);
         }
 
         activeBlock = next;
@@ -229,7 +558,9 @@ public class test : MonoBehaviour
         if (!IsValid(activeBlock.position, activeBlock.rotation))
         {
             gameOver = true;
+            return;
         }
+
     }
 
     private int DrawBlockFromBag()
@@ -275,19 +606,34 @@ public class test : MonoBehaviour
 
     private void TryRotate(int direction)
     {
-        if (blockData[activeBlock.dataIndex].name == "O")
-        {
-            return;
-        }
-
         int targetRotation = (activeBlock.rotation + direction + 4) % 4;
-        int[] wallKicks = direction > 0
-            ? new[] { 0, -1, 1, -2, 2 }
-            : new[] { 0, 1, -1, 2, -2 };
+        Vector2Int[] wallKicks = direction > 0
+            ? new[]
+            {
+                Vector2Int.zero,
+                Vector2Int.left,
+                Vector2Int.right,
+                Vector2Int.up,
+                new Vector2Int(-1, 1),
+                new Vector2Int(1, 1),
+                Vector2Int.left * 2,
+                Vector2Int.right * 2
+            }
+            : new[]
+            {
+                Vector2Int.zero,
+                Vector2Int.right,
+                Vector2Int.left,
+                Vector2Int.up,
+                new Vector2Int(1, 1),
+                new Vector2Int(-1, 1),
+                Vector2Int.right * 2,
+                Vector2Int.left * 2
+            };
 
-        foreach (int kick in wallKicks)
+        foreach (Vector2Int kick in wallKicks)
         {
-            Vector2Int target = activeBlock.position + new Vector2Int(kick, 0);
+            Vector2Int target = activeBlock.position + kick;
             if (!IsValid(target, targetRotation))
             {
                 continue;
@@ -335,17 +681,31 @@ public class test : MonoBehaviour
     private void LockBlock()
     {
         Vector2Int[] cells = blockData[activeBlock.dataIndex].cells;
+        Vector2Int exitDirection = GetExitDirection(cells, activeBlock.position, activeBlock.rotation);
+        int blockId = nextLockedBlockId++;
+
         for (int i = 0; i < cells.Length; i++)
         {
             Vector2Int cell = activeBlock.position + RotateCell(cells[i], activeBlock.rotation);
-            board[cell.x, cell.y] = activeBlock.views[i];
+            board[cell.x, cell.y] = new BoardCell
+            {
+                view = activeBlock.views[i],
+                blockId = blockId,
+                order = blockData[activeBlock.dataIndex].orderNumbers[i],
+                exitDirection = exitDirection
+            };
             activeBlock.views[i].name = "Locked Block";
         }
 
-        int lineCount = ClearCompletedLines();
+        int lineCount = enableTetrisCondition ? ClearCompletedLines() : 0;
         score += GetLineScore(lineCount);
         clearedLines += lineCount;
-        SpawnBlock();
+        RefreshPathLines();
+
+        if (!gameOver && !gameClear)
+        {
+            SpawnBlock();
+        }
     }
 
     private int ClearCompletedLines()
@@ -387,9 +747,10 @@ public class test : MonoBehaviour
     {
         for (int x = 0; x < width; x++)
         {
-            Destroy(board[x, y]);
+            Destroy(board[x, y].view);
             board[x, y] = null;
         }
+
     }
 
     private void MoveLinesDown(int startY)
@@ -398,7 +759,7 @@ public class test : MonoBehaviour
         {
             for (int x = 0; x < width; x++)
             {
-                GameObject block = board[x, y];
+                BoardCell block = board[x, y];
                 if (block == null)
                 {
                     continue;
@@ -406,9 +767,250 @@ public class test : MonoBehaviour
 
                 board[x, y - 1] = block;
                 board[x, y] = null;
-                block.transform.localPosition += Vector3.down;
+                block.view.transform.localPosition += Vector3.down;
+
             }
         }
+    }
+
+    private void RefreshPathLines()
+    {
+        if (pathRoot != null)
+        {
+            Destroy(pathRoot.gameObject);
+        }
+
+        pathRoot = new GameObject("Reachable Path Lines").transform;
+        pathRoot.SetParent(boardRoot, false);
+        gameClear = false;
+        bool reachedClearTarget = false;
+        bool reachedDangerZone = false;
+
+        if (!IsInsideBoard(startPosition) || board[startPosition.x, startPosition.y] == null)
+        {
+            return;
+        }
+
+        bool[,] visited = new bool[width, height];
+        Queue<Vector2Int> queue = new Queue<Vector2Int>();
+        HashSet<string> drawnEdges = new HashSet<string>();
+
+        visited[startPosition.x, startPosition.y] = true;
+        queue.Enqueue(startPosition);
+
+        if (IsClearTarget(startPosition))
+        {
+            reachedClearTarget = true;
+        }
+
+        while (queue.Count > 0)
+        {
+            Vector2Int current = queue.Dequeue();
+            List<Vector2Int> nextPositions = GetReachableNeighbors(current);
+
+            for (int i = 0; i < nextPositions.Count; i++)
+            {
+                Vector2Int next = nextPositions[i];
+                string edgeKey = GetEdgeKey(current, next);
+                if (drawnEdges.Add(edgeKey))
+                {
+                    CreatePathLine(current, next);
+                }
+
+                if (IsDangerZone(next))
+                {
+                    reachedDangerZone = true;
+                }
+
+                if (visited[next.x, next.y])
+                {
+                    continue;
+                }
+
+                visited[next.x, next.y] = true;
+                queue.Enqueue(next);
+
+                if (IsClearTarget(next))
+                {
+                    reachedClearTarget = true;
+                }
+            }
+        }
+
+        if (reachedDangerZone)
+        {
+            gameOver = true;
+            gameClear = false;
+            return;
+        }
+
+        if (reachedClearTarget)
+        {
+            SetGameClear();
+        }
+    }
+
+    private List<Vector2Int> GetReachableNeighbors(Vector2Int position)
+    {
+        List<Vector2Int> neighbors = new List<Vector2Int>();
+        if (!IsInsideBoard(position))
+        {
+            return neighbors;
+        }
+
+        BoardCell current = board[position.x, position.y];
+        if (current == null)
+        {
+            return neighbors;
+        }
+
+        Vector2Int[] directions =
+        {
+            Vector2Int.up,
+            Vector2Int.right,
+            Vector2Int.left,
+            Vector2Int.down
+        };
+
+        for (int i = 0; i < directions.Length; i++)
+        {
+            Vector2Int candidatePosition = position + directions[i];
+            if (!IsInsideBoard(candidatePosition))
+            {
+                continue;
+            }
+
+            BoardCell candidate = board[candidatePosition.x, candidatePosition.y];
+            if (candidate == null)
+            {
+                continue;
+            }
+
+            if (current.blockId == 0)
+            {
+                neighbors.Add(candidatePosition);
+                continue;
+            }
+
+            if (current.order == 4)
+            {
+                if (candidate.blockId == current.blockId && candidate.order == 3)
+                {
+                    continue;
+                }
+
+                neighbors.Add(candidatePosition);
+                continue;
+            }
+
+            if (candidate.blockId == current.blockId && candidate.order == current.order + 1)
+            {
+                neighbors.Add(candidatePosition);
+            }
+        }
+
+        return neighbors;
+    }
+
+    private void CreatePathLine(Vector2Int from, Vector2Int to)
+    {
+        Vector3 start = new Vector3(from.x, from.y, -0.6f);
+        Vector3 end = new Vector3(to.x, to.y, -0.6f);
+        Vector3 delta = end - start;
+
+        GameObject line = new GameObject("Path Line");
+        line.transform.SetParent(pathRoot, false);
+        line.transform.localPosition = (start + end) * 0.5f;
+        line.transform.localRotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(delta.y, delta.x) * Mathf.Rad2Deg);
+        line.transform.localScale = new Vector3(delta.magnitude, pathLineThickness, 1f);
+
+        SpriteRenderer renderer = line.AddComponent<SpriteRenderer>();
+        renderer.sprite = blockSprite;
+        renderer.color = pathLineColor;
+        renderer.sortingOrder = 3;
+    }
+
+    private bool IsClearTarget(Vector2Int position)
+    {
+        for (int i = 0; i < clearTargetPositions.Length; i++)
+        {
+            if (ClampToBoard(clearTargetPositions[i]) == position)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void SetGameClear()
+    {
+        if (gameOver || gameClear)
+        {
+            return;
+        }
+
+        gameClear = true;
+        if (!string.IsNullOrWhiteSpace(nextStageSceneName) && !loadingNextStage)
+        {
+            StartCoroutine(LoadNextStageAfterDelay());
+        }
+    }
+
+    private IEnumerator LoadNextStageAfterDelay()
+    {
+        loadingNextStage = true;
+        yield return new WaitForSeconds(nextStageDelay);
+        SceneManager.LoadScene(nextStageSceneName);
+    }
+
+    private bool IsDangerZone(Vector2Int position)
+    {
+        for (int i = 0; i < dangerZonePositions.Length; i++)
+        {
+            if (ClampToBoard(dangerZonePositions[i]) == position)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private Vector2Int ClampToBoard(Vector2Int position)
+    {
+        return new Vector2Int(
+            Mathf.Clamp(position.x, 0, width - 1),
+            Mathf.Clamp(position.y, 0, height - 1));
+    }
+
+    private static string GetEdgeKey(Vector2Int a, Vector2Int b)
+    {
+        int aKey = a.y * 1000 + a.x;
+        int bKey = b.y * 1000 + b.x;
+        return aKey < bKey ? $"{aKey}:{bKey}" : $"{bKey}:{aKey}";
+    }
+
+    private bool IsInsideBoard(Vector2Int position)
+    {
+        return position.x >= 0 && position.x < width && position.y >= 0 && position.y < height;
+    }
+
+    private Vector2Int GetExitDirection(Vector2Int[] cells, Vector2Int position, int rotation)
+    {
+        int[] orderNumbers = blockData[activeBlock.dataIndex].orderNumbers;
+        int thirdIndex = Array.IndexOf(orderNumbers, 3);
+        int fourthIndex = Array.IndexOf(orderNumbers, 4);
+
+        if (thirdIndex < 0 || fourthIndex < 0)
+        {
+            return Vector2Int.up;
+        }
+
+        Vector2Int third = position + RotateCell(cells[thirdIndex], rotation);
+        Vector2Int fourth = position + RotateCell(cells[fourthIndex], rotation);
+        Vector2Int direction = fourth - third;
+        return new Vector2Int(Math.Sign(direction.x), Math.Sign(direction.y));
     }
 
     private void UpdateActiveViews()
@@ -419,6 +1021,29 @@ public class test : MonoBehaviour
             Vector2Int cell = activeBlock.position + RotateCell(cells[i], activeBlock.rotation);
             activeBlock.views[i].transform.localPosition = new Vector3(cell.x, cell.y, 0f);
         }
+    }
+
+    private void AddOrderLabel(GameObject parent, int order)
+    {
+        if (!showBlockOrderNumbers)
+        {
+            return;
+        }
+
+        GameObject label = new GameObject($"Order {order}");
+        label.transform.SetParent(parent.transform, false);
+        label.transform.localPosition = new Vector3(0f, 0f, -0.2f);
+
+        TextMesh text = label.AddComponent<TextMesh>();
+        text.text = order.ToString();
+        text.anchor = TextAnchor.MiddleCenter;
+        text.alignment = TextAlignment.Center;
+        text.characterSize = 0.35f;
+        text.fontSize = 48;
+        text.color = Color.black;
+
+        MeshRenderer renderer = label.GetComponent<MeshRenderer>();
+        renderer.sortingOrder = 4;
     }
 
     private static Vector2Int RotateCell(Vector2Int cell, int rotation)
@@ -451,13 +1076,26 @@ public class test : MonoBehaviour
             Destroy(boardRoot.gameObject);
         }
 
+        if (stageBackgroundView != null)
+        {
+            Destroy(stageBackgroundView);
+        }
+
         score = 0;
         clearedLines = 0;
         gameOver = false;
+        gameClear = false;
+        loadingNextStage = false;
         blockBag = null;
         blockBagIndex = 0;
+        nextLockedBlockId = 1;
         SetupBoard();
-        SpawnBlock();
+        SetupPlayerStart();
+        UpdateClearTargetView();
+        UpdateDangerZoneViews();
+        SetupCamera();
+        SetupStageBackground();
+        StartCoroutine(PlayMapIntroThenStart());
     }
 
     private void OnGUI()
@@ -473,6 +1111,17 @@ public class test : MonoBehaviour
             new Rect(20, 52, 850, 35),
             $"← → 이동 | {clockwiseRotationKey} 시계 회전 | {counterClockwiseRotationKey} 반시계 회전 | ↓ 빠르게 | Space 즉시 낙하",
             style);
+
+        if (!gameOver && gameClear)
+        {
+            GUIStyle clearStyle = new GUIStyle(style)
+            {
+                fontSize = 42,
+                alignment = TextAnchor.MiddleCenter
+            };
+            GUI.Label(new Rect(0, Screen.height / 2f - 60f, Screen.width, 120f), "GAME CLEAR\nR 키로 다시 시작", clearStyle);
+            return;
+        }
 
         if (!gameOver)
         {

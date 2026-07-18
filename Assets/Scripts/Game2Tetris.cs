@@ -1,0 +1,1105 @@
+using System.Collections;
+using TMPro;
+using UnityEngine;
+using UnityEngine.InputSystem;
+using UnityEngine.SceneManagement;
+
+public class Game2Tetris : MonoBehaviour
+{
+    private const float GuiReferenceWidth = 1920f;
+    private const float GuiReferenceHeight = 1080f;
+
+    [Header("Board")]
+    [Tooltip("Connect the Plane from the Game2 scene.")]
+    [SerializeField] private Transform plane;
+    [SerializeField, Min(4)] private int boardWidth = 10;
+    [SerializeField, Min(4)] private int boardDepth = 20;
+    [SerializeField, Min(0.1f)] private float cellSize = 1f;
+    [SerializeField] private float blockHeight = 0.5f;
+
+    [Header("Camera")]
+    [SerializeField] private bool alignCameraToBoard = true;
+    [SerializeField, Min(0.1f)] private float cameraDistance = 20f;
+    [SerializeField, Min(0f)] private float cameraPadding = 1.5f;
+
+    [Header("Block Prefabs")]
+    [SerializeField] private GameObject blockI;
+    [SerializeField] private GameObject blockO;
+    [SerializeField] private GameObject blockT;
+    [SerializeField] private GameObject blockS;
+    [SerializeField] private GameObject blockZ;
+    [SerializeField] private GameObject blockJ;
+    [SerializeField] private GameObject blockL;
+
+    [Header("Speed")]
+    [SerializeField, Min(0.05f)] private float fallInterval = 0.7f;
+    [SerializeField, Min(0.01f)] private float softDropInterval = 0.05f;
+    [SerializeField, Min(0f)] private float lockDelay = 0.5f;
+    [SerializeField, Min(0)] private int maxLockDelayResets = 15;
+
+    [Header("Garbage Lines")]
+    [SerializeField] private bool enableGarbageLines = true;
+    [SerializeField] private GameObject garbageBlockPrefab;
+    [SerializeField] private Color garbageBlockColor = Color.gray;
+    [SerializeField, Min(0)] private int initialGarbageLines = 4;
+    [SerializeField, Min(1)] private int garbageLinesPerRise = 4;
+    [SerializeField, Min(1)] private int garbageRowsPerHoleColumn = 2;
+    [SerializeField, Min(0.1f)] private float garbageRiseInterval = 30f;
+    [SerializeField] private TMP_Text garbageTimerText;
+
+    [Header("Gimmick 1")]
+    [SerializeField] private bool enableGimmick1;
+    [SerializeField, Min(1)] private int gimmick1SpawnInterval = 15;
+    [SerializeField, Min(1)] private int gimmick1ClearRows = 5;
+    [SerializeField] private GameObject gimmick1EffectPrefab;
+
+    [Header("Gimmick 2")]
+    [SerializeField] private bool enableGimmick2;
+    [SerializeField, Min(1)] private int gimmick2SpawnInterval = 20;
+    [SerializeField, Min(1)] private int gimmick2ClearColumns = 2;
+    [SerializeField] private GameObject gimmick2EffectPrefab;
+
+    [Header("Gimmick Warning")]
+    [SerializeField, Min(1)] private int gimmickWarningSpawnLead = 2;
+    [SerializeField, Min(0.1f)] private float gimmickWarningBlinkSpeed = 4f;
+
+    [Header("Runtime GUI")]
+    [SerializeField] private Vector2 hudPosition = new Vector2(20f, 20f);
+    [SerializeField, Min(10)] private int hudFontSize = 18;
+    [SerializeField] private Vector2 hudLineSize = new Vector2(520f, 34f);
+    [SerializeField, Min(1f)] private float hudLineSpacing = 34f;
+    [SerializeField] private Vector2 holdPreviewPosition = new Vector2(20f, 20f);
+    [SerializeField, Min(80f)] private float holdPreviewPanelWidth = 260f;
+    [SerializeField, Min(40f)] private float holdPreviewPanelHeight = 150f;
+    [SerializeField, Min(40f)] private float nextPreviewPanelHeight = 140f;
+    [SerializeField, Min(8)] private int holdPreviewFontSize = 28;
+    [SerializeField, Min(12f)] private float holdPreviewLabelHeight = 52f;
+    [SerializeField, Min(0f)] private float holdPreviewLabelGap = 8f;
+    [SerializeField, Min(4f)] private float holdPreviewCellSize = 34f;
+    [SerializeField, Min(4f)] private float nextPreviewCellSize = 32f;
+    [SerializeField, Min(30f)] private float holdPreviewSectionSpacing = 180f;
+    [SerializeField, Min(30f)] private float nextPreviewSpacing = 120f;
+    [SerializeField] private Vector2 warningCenterOffset = Vector2.zero;
+    [SerializeField, Min(10)] private int warningFontSize = 56;
+    [SerializeField, Min(20f)] private float warningLineHeight = 70f;
+    [SerializeField, Min(1f)] private float warningSpacing = 80f;
+    [SerializeField, Min(10)] private int gameOverFontSize = 64;
+    [SerializeField, Min(30f)] private float gameOverHeight = 180f;
+
+    [Header("Controls")]
+    [SerializeField] private Key moveLeftKey = Key.LeftArrow;
+    [SerializeField] private Key moveRightKey = Key.RightArrow;
+    [SerializeField] private Key softDropKey = Key.DownArrow;
+    [SerializeField] private Key hardDropKey = Key.Space;
+    [SerializeField] private Key clockwiseKey = Key.X;
+    [SerializeField] private Key counterClockwiseKey = Key.Z;
+    [SerializeField] private Key holdKey = Key.S;
+    [SerializeField] private Key debugStageClearKey = Key.Backquote;
+    [SerializeField] private Key restartKey = Key.R;
+
+    [Header("Ghost Piece")]
+    [SerializeField] private Color ghostColor = new Color(1f, 1f, 1f, 0.25f);
+    [SerializeField, Min(0f)] private float ghostBehindOffset = 0.05f;
+
+    [Header("Order Labels")]
+    [SerializeField] private bool showOrderLabels = true;
+    [SerializeField] private Color orderLabelColor = Color.black;
+    [SerializeField, Min(0.01f)] private float orderLabelSize = 0.35f;
+    [SerializeField] private float orderLabelHeightOffset = 0.55f;
+
+    [Header("Path Points")]
+    [SerializeField] private Vector2Int pathStartPoint = new Vector2Int(5, -1);
+    [SerializeField] private Vector2Int[] pathEndPoints =
+    {
+        new Vector2Int(5, 20)
+    };
+    [SerializeField] private Color pathStartColor = Color.blue;
+    [SerializeField] private Color pathEndColor = Color.green;
+    [SerializeField] private Color dangerZoneColor = new Color(1f, 0f, 0f, 0.45f);
+    [SerializeField] private GameObject dangerZonePrefab;
+    [SerializeField, Min(0.01f)] private float dangerZonePrefabScale = 1f;
+    [SerializeField] private Vector3 dangerZonePrefabRotation;
+    [SerializeField, Min(0.05f)] private float pathPointSize = 0.8f;
+    [SerializeField] private float pathPointHeightOffset = 0.08f;
+    [SerializeField] private Color pathLineColor = Color.white;
+    [SerializeField, Min(0.01f)] private float pathLineThickness = 0.08f;
+    [SerializeField] private float pathLineHeightOffset = 0.16f;
+    [SerializeField] private GameObject pathLineEffectPrefab;
+    [SerializeField] private Vector2Int[] dangerZonePositions =
+    {
+        new Vector2Int(4, 10),
+        new Vector2Int(5, 10),
+        new Vector2Int(6, 10)
+    };
+
+    [Header("Stage Presentation")]
+    [SerializeField] private bool playMapIntro = true;
+    [SerializeField, Min(0.05f)] private float mapIntroInterval = 1f;
+    [SerializeField] private GameObject mapRevealEffectPrefab;
+    [SerializeField, Min(0.1f)] private float mapRevealEffectLifetime = 3f;
+    [SerializeField] private GameObject stageBackgroundPrefab;
+    [SerializeField] private bool fitBackgroundToCamera = true;
+    [SerializeField] private bool fitBackgroundToBoardFrame = true;
+    [SerializeField] private Vector2 backgroundFrameCenter = new Vector2(0.497f, 0.508f);
+    [SerializeField] private Vector2 backgroundFrameSize = new Vector2(0.285f, 0.723f);
+    [SerializeField] private GameObject stageFramePrefab;
+    [SerializeField] private Color stageFrameColor = new Color(0.18f, 0.18f, 0.22f, 1f);
+    [SerializeField] private float stageFrameHeightOffset = 0.04f;
+    [SerializeField, Min(0.01f)] private float stageFrameScale = 1f;
+    [SerializeField, Min(0.001f)] private float stageFrameThickness = 0.03f;
+
+    [Header("Stage Clear")]
+    [SerializeField] private string nextStageSceneName;
+    [SerializeField, Min(0f)] private float nextStageDelay = 1f;
+
+    private TetrominoData[] tetrominoes;
+    private ActiveTetrisPiece activePiece;
+    private TetrisBoard board;
+    private TetrisGhost ghost;
+    private TetrisOrderLabelRenderer orderLabelRenderer;
+    private TetrisPathPointRenderer pathPointRenderer;
+    private TetrisPathLineRenderer pathLineRenderer;
+    private TetrisPathRules pathRules;
+    private TetrisPathResult pathResult;
+    private TetrisGarbageLineManager garbageLineManager;
+    private Vector2Int[] dangerZones;
+    private Game2StagePresentation stagePresentation;
+    private SevenBag sevenBag;
+    private float nextFallTime;
+    private float lockTimer;
+    private int lockDelayResetCount;
+    private int score;
+    private int clearedLines;
+    private int nextLockedBlockId = 1;
+    private int spawnedPieceCount;
+    private int holdPieceType = -1;
+    private bool gameOver;
+    private bool gameClear;
+    private bool mapIntroPlaying;
+    private bool loadingNextStage;
+    private bool canHold = true;
+    private float elapsedGameTime;
+    private Color garbageTimerDefaultColor = Color.white;
+
+    private void Start()
+    {
+        StartCoroutine(BeginGame());
+    }
+
+    private IEnumerator BeginGame()
+    {
+        if (!ValidateSetup())
+        {
+            enabled = false;
+            yield break;
+        }
+
+        CacheGarbageTimerColor();
+        ApplySavedKeyBindings();
+        elapsedGameTime = 0f;
+        CreateTetrominoes();
+        board = new TetrisBoard(boardWidth, boardDepth, cellSize, blockHeight, plane);
+        AlignCameraToBoard();
+        ghost = new TetrisGhost(ghostColor, ghostBehindOffset);
+        orderLabelRenderer = new TetrisOrderLabelRenderer(orderLabelColor, orderLabelSize, orderLabelHeightOffset);
+        SetupGarbageLines();
+        SetupPath();
+        stagePresentation = new Game2StagePresentation(
+            transform,
+            board,
+            plane,
+            boardWidth,
+            boardDepth,
+            stageBackgroundPrefab,
+            fitBackgroundToCamera,
+            fitBackgroundToBoardFrame,
+            backgroundFrameCenter,
+            backgroundFrameSize,
+            stageFramePrefab,
+            stageFrameColor,
+            Mathf.Max(0.02f, Mathf.Min(stageFrameHeightOffset, pathPointHeightOffset - 0.01f)),
+            cellSize * stageFrameScale,
+            stageFrameThickness,
+            mapRevealEffectPrefab,
+            mapRevealEffectLifetime);
+        stagePresentation.SetupFrame();
+        stagePresentation.SetupBackground();
+        sevenBag = new SevenBag();
+        mapIntroPlaying = true;
+        yield return stagePresentation.PlayMapIntro(
+            playMapIntro,
+            mapIntroInterval,
+            stagePresentation.LeftWallViews,
+            stagePresentation.RightWallViews,
+            stagePresentation.FloorViews,
+            pathPointRenderer.StartMarkers,
+            pathPointRenderer.EndMarkers,
+            pathPointRenderer.DangerMarkers);
+        mapIntroPlaying = false;
+        SpawnPiece();
+    }
+
+    private void ApplySavedKeyBindings()
+    {
+        holdKey = KeyBindingSettings.HoldKey;
+        clockwiseKey = KeyBindingSettings.ClockwiseKey;
+        counterClockwiseKey = KeyBindingSettings.CounterClockwiseKey;
+    }
+
+    private void Update()
+    {
+        Keyboard keyboard = Keyboard.current;
+        if (keyboard == null || mapIntroPlaying)
+        {
+            return;
+        }
+
+        if (!gameOver && !gameClear)
+        {
+            elapsedGameTime += Time.deltaTime;
+        }
+
+        UpdateGameTimerText();
+
+        if (gameOver)
+        {
+            if (keyboard[restartKey].wasPressedThisFrame)
+            {
+                RestartScene();
+            }
+
+            return;
+        }
+
+        if (gameClear)
+        {
+            return;
+        }
+
+        HandleInput(keyboard);
+        HandleAutomaticFall(keyboard);
+        HandleLockDelay();
+        HandleGarbageRise();
+        UpdateGameTimerText();
+    }
+
+    private void HandleInput(Keyboard keyboard)
+    {
+        if (keyboard[debugStageClearKey].wasPressedThisFrame)
+        {
+            TriggerGameClear();
+            return;
+        }
+
+        if (keyboard[moveLeftKey].wasPressedThisFrame) TryMove(Vector2Int.left);
+        if (keyboard[moveRightKey].wasPressedThisFrame) TryMove(Vector2Int.right);
+        if (keyboard[clockwiseKey].wasPressedThisFrame) TryRotate(1);
+        if (keyboard[counterClockwiseKey].wasPressedThisFrame) TryRotate(-1);
+        if (keyboard[holdKey].wasPressedThisFrame) HoldPiece();
+
+        if (keyboard[hardDropKey].wasPressedThisFrame)
+        {
+            HardDrop();
+        }
+    }
+
+    private void HandleAutomaticFall(Keyboard keyboard)
+    {
+        if (activePiece == null || keyboard[hardDropKey].wasPressedThisFrame)
+        {
+            return;
+        }
+
+        float interval = keyboard[softDropKey].isPressed ? softDropInterval : fallInterval;
+        if (Time.time < nextFallTime)
+        {
+            return;
+        }
+
+        TryMove(Vector2Int.down);
+
+        nextFallTime = Time.time + interval;
+    }
+
+    private void HandleLockDelay()
+    {
+        if (activePiece == null || !IsGrounded())
+        {
+            lockTimer = 0f;
+            return;
+        }
+
+        lockTimer += Time.deltaTime;
+        if (lockTimer >= lockDelay)
+        {
+            LockPiece();
+        }
+    }
+
+    private void HandleGarbageRise()
+    {
+        if (garbageLineManager == null)
+        {
+            return;
+        }
+
+        if (!garbageLineManager.Tick(out bool addedLines))
+        {
+            gameOver = true;
+            ghost?.Hide();
+            return;
+        }
+
+        if (addedLines)
+        {
+            if (activePiece != null && !board.IsValid(CurrentData, activePiece.Position, activePiece.Rotation))
+            {
+                gameOver = true;
+                ghost?.Hide();
+                return;
+            }
+
+            EvaluatePath();
+            UpdateGhost();
+        }
+    }
+
+    private bool ValidateSetup()
+    {
+        if (plane == null)
+        {
+            Debug.LogError("Game2Tetris: Connect the Game2 Plane in the Inspector.", this);
+            return false;
+        }
+
+        GameObject[] prefabs = { blockI, blockO, blockT, blockS, blockZ, blockJ, blockL };
+        foreach (GameObject prefab in prefabs)
+        {
+            if (prefab == null)
+            {
+                Debug.LogError("Game2Tetris: Connect all seven block prefabs in the Inspector.", this);
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private void AlignCameraToBoard()
+    {
+        if (!alignCameraToBoard)
+        {
+            return;
+        }
+
+        Camera mainCamera = Camera.main;
+        if (mainCamera == null)
+        {
+            Debug.LogWarning("Game2Tetris: Main Camera was not found. Camera alignment skipped.", this);
+            return;
+        }
+
+        Vector3 boardCenter = GetBoardCenterWorld();
+        mainCamera.transform.position = boardCenter + plane.up * cameraDistance;
+        mainCamera.transform.rotation = Quaternion.LookRotation(-plane.up, plane.forward);
+
+        mainCamera.orthographic = true;
+        float boardWorldWidth = boardWidth * cellSize;
+        float boardWorldDepth = boardDepth * cellSize;
+        float sizeByDepth = boardWorldDepth * 0.5f + cameraPadding;
+        float sizeByWidth = (boardWorldWidth * 0.5f + cameraPadding) / mainCamera.aspect;
+        mainCamera.orthographicSize = Mathf.Max(sizeByDepth, sizeByWidth);
+    }
+
+    private Vector3 GetBoardCenterWorld()
+    {
+        Vector3 min = board.GridPointToWorld(new Vector2Int(0, 0));
+        Vector3 max = board.GridPointToWorld(new Vector2Int(boardWidth - 1, boardDepth - 1));
+        return (min + max) * 0.5f;
+    }
+
+    private void CreateTetrominoes()
+    {
+        tetrominoes = new[]
+        {
+            TetrominoData.FromPrefab("I", blockI), TetrominoData.FromPrefab("O", blockO),
+            TetrominoData.FromPrefab("T", blockT), TetrominoData.FromPrefab("S", blockS),
+            TetrominoData.FromPrefab("Z", blockZ), TetrominoData.FromPrefab("J", blockJ),
+            TetrominoData.FromPrefab("L", blockL)
+        };
+    }
+
+    private void SpawnPiece()
+    {
+        SpawnPiece(sevenBag.Draw());
+    }
+
+    private void SpawnPiece(int type, bool resetHold)
+    {
+        TetrominoData data = tetrominoes[type];
+        activePiece = new ActiveTetrisPiece
+        {
+            Type = type,
+            LockedBlockId = nextLockedBlockId++,
+            Position = new Vector2Int(boardWidth / 2 - 1, data.GetSpawnRowFromTop(boardDepth)),
+            Rotation = 0,
+            Root = Instantiate(data.Prefab)
+        };
+
+        activePiece.Root.name = $"Active {data.Name}";
+        activePiece.Root.transform.localScale = Vector3.one * cellSize;
+        lockTimer = 0f;
+        lockDelayResetCount = 0;
+        if (showOrderLabels)
+        {
+            orderLabelRenderer.AddLabels(data, activePiece.Root.transform, plane);
+        }
+
+        UpdatePieceView();
+        nextFallTime = Time.time + fallInterval;
+
+        if (!board.IsValid(data, activePiece.Position, activePiece.Rotation))
+        {
+            gameOver = true;
+            ghost.Hide();
+            return;
+        }
+
+        if (resetHold)
+        {
+            canHold = true;
+        }
+
+        ghost.Create(data, cellSize);
+        UpdateGhost();
+
+        if (resetHold)
+        {
+            HandleSpawnGimmicks();
+        }
+    }
+
+    private void UpdateGameTimerText()
+    {
+        if (garbageTimerText == null)
+        {
+            return;
+        }
+
+        if (!garbageTimerText.gameObject.activeSelf)
+        {
+            garbageTimerText.gameObject.SetActive(true);
+        }
+
+        int totalSeconds = Mathf.FloorToInt(elapsedGameTime);
+        int minutes = totalSeconds / 60;
+        int seconds = totalSeconds % 60;
+        bool shouldWarn = enableGarbageLines
+            && garbageLineManager != null
+            && !gameOver
+            && !gameClear
+            && garbageLineManager.RemainingTime < 10f;
+
+        garbageTimerText.color = shouldWarn ? Color.red : garbageTimerDefaultColor;
+        garbageTimerText.text = $"{minutes:00}:{seconds:00}";
+    }
+
+    private void CacheGarbageTimerColor()
+    {
+        if (garbageTimerText != null)
+        {
+            garbageTimerDefaultColor = garbageTimerText.color;
+        }
+    }
+
+    private void SpawnPiece(int type)
+    {
+        SpawnPiece(type, true);
+    }
+
+    private void HoldPiece()
+    {
+        if (!canHold || activePiece == null)
+        {
+            return;
+        }
+
+        int currentType = activePiece.Type;
+        DestroyActivePiece();
+        canHold = false;
+
+        if (holdPieceType < 0)
+        {
+            holdPieceType = currentType;
+            SpawnPiece(sevenBag.Draw(), false);
+            return;
+        }
+
+        int nextType = holdPieceType;
+        holdPieceType = currentType;
+        SpawnPiece(nextType, false);
+    }
+
+    private void DestroyActivePiece()
+    {
+        if (activePiece == null)
+        {
+            return;
+        }
+
+        if (showOrderLabels && orderLabelRenderer != null)
+        {
+            foreach (Transform cube in TetrominoData.GetCubes(activePiece.Root.transform))
+            {
+                orderLabelRenderer.RemoveLabelForTarget(cube);
+            }
+        }
+
+        ghost?.Hide();
+        Destroy(activePiece.Root);
+        activePiece = null;
+    }
+
+    private bool TryMove(Vector2Int direction)
+    {
+        bool wasGrounded = direction.x != 0 && IsGrounded();
+        Vector2Int target = activePiece.Position + direction;
+        if (!board.IsValid(CurrentData, target, activePiece.Rotation))
+        {
+            return false;
+        }
+
+        activePiece.Position = target;
+        ResetLockDelayAfterAdjustment(wasGrounded);
+        UpdatePieceView();
+        return true;
+    }
+
+    private void TryRotate(int direction)
+    {
+        // if (CurrentData.Name == "O") return;
+
+        bool wasGrounded = IsGrounded();
+        int rotation = (activePiece.Rotation + direction + 4) % 4;
+        int[] kicks = direction > 0 ? new[] { 0, -1, 1, -2, 2 } : new[] { 0, 1, -1, 2, -2 };
+        foreach (int kick in kicks)
+        {
+            Vector2Int target = activePiece.Position + new Vector2Int(kick, 0);
+            if (!board.IsValid(CurrentData, target, rotation)) continue;
+
+            activePiece.Position = target;
+            activePiece.Rotation = rotation;
+            ResetLockDelayAfterAdjustment(wasGrounded);
+            UpdatePieceView();
+            return;
+        }
+    }
+
+    private bool IsGrounded()
+    {
+        return activePiece != null &&
+               !board.IsValid(CurrentData, activePiece.Position + Vector2Int.down, activePiece.Rotation);
+    }
+
+    private void ResetLockDelayAfterAdjustment(bool wasGrounded)
+    {
+        if (!wasGrounded || !IsGrounded() || lockDelayResetCount >= maxLockDelayResets)
+        {
+            return;
+        }
+
+        lockTimer = 0f;
+        lockDelayResetCount++;
+    }
+
+    private void HardDrop()
+    {
+        int distance = 0;
+        while (TryMove(Vector2Int.down)) distance++;
+        score += distance * 2;
+        LockPiece();
+    }
+
+    private void LockPiece()
+    {
+        if (!board.Lock(CurrentData, activePiece))
+        {
+            gameOver = true;
+            ghost.Hide();
+            return;
+        }
+
+        orderLabelRenderer?.Refresh();
+        ghost.Destroy();
+        activePiece = null;
+        System.Action<Transform> removeLabel = orderLabelRenderer == null ? null : orderLabelRenderer.RemoveLabelForTarget;
+        int lines = board.ClearFullLines(removeLabel);
+        orderLabelRenderer?.Refresh();
+        EvaluatePath();
+        clearedLines += lines;
+        score += GetLineScore(lines);
+
+        if (gameOver || gameClear)
+        {
+            return;
+        }
+
+        SpawnPiece();
+    }
+
+    private void HandleSpawnGimmicks()
+    {
+        spawnedPieceCount++;
+
+        if (enableGimmick1 && spawnedPieceCount % gimmick1SpawnInterval == 0)
+        {
+            TriggerGimmick1();
+        }
+
+        if (gameOver || gameClear)
+        {
+            return;
+        }
+
+        if (enableGimmick2 && spawnedPieceCount % gimmick2SpawnInterval == 0)
+        {
+            TriggerGimmick2();
+        }
+    }
+
+    private void TriggerGimmick1()
+    {
+        System.Action<Transform> removeLabel = orderLabelRenderer == null ? null : orderLabelRenderer.RemoveLabelForTarget;
+        int cleared = board.ClearBottomRows(
+            gimmick1ClearRows,
+            removeLabel,
+            cell => SpawnGimmickEffect(gimmick1EffectPrefab, cell));
+
+        if (cleared > 0)
+        {
+            RefreshAfterBoardGimmick();
+        }
+    }
+
+    private void TriggerGimmick2()
+    {
+        int clearColumns = Mathf.Clamp(gimmick2ClearColumns, 1, board.Width);
+        int startColumn = Random.Range(0, board.Width - clearColumns + 1);
+        System.Action<Transform> removeLabel = orderLabelRenderer == null ? null : orderLabelRenderer.RemoveLabelForTarget;
+        int cleared = board.ClearColumns(
+            startColumn,
+            clearColumns,
+            removeLabel,
+            cell => SpawnGimmickEffect(gimmick2EffectPrefab, cell));
+
+        if (cleared > 0)
+        {
+            RefreshAfterBoardGimmick();
+        }
+    }
+
+    private void RefreshAfterBoardGimmick()
+    {
+        orderLabelRenderer?.Refresh();
+        EvaluatePath();
+        UpdateGhost();
+    }
+
+    private void SpawnGimmickEffect(GameObject effectPrefab, Vector2Int cell)
+    {
+        if (effectPrefab == null)
+        {
+            return;
+        }
+
+        GameObject effect = Instantiate(effectPrefab, board.CellToWorld(cell), Quaternion.identity);
+        Destroy(effect, 3f);
+    }
+
+    private void SetupGarbageLines()
+    {
+        if (!enableGarbageLines)
+        {
+            garbageLineManager = null;
+            return;
+        }
+
+        garbageLineManager = new TetrisGarbageLineManager(
+            board,
+            garbageBlockPrefab,
+            garbageBlockColor,
+            garbageLinesPerRise,
+            garbageRiseInterval,
+            garbageRowsPerHoleColumn);
+
+        if (!garbageLineManager.AddInitialLines(initialGarbageLines))
+        {
+            gameOver = true;
+        }
+    }
+
+    private void SetupPath()
+    {
+        Vector2Int startPoint = ClampToPathPointArea(pathStartPoint);
+        Vector2Int[] endPoints = ClampPathPoints(pathEndPoints);
+        pathPointRenderer = new TetrisPathPointRenderer(
+            board,
+            plane,
+            pathStartColor,
+            pathEndColor,
+            dangerZoneColor,
+            pathPointSize,
+            pathPointHeightOffset,
+            dangerZonePrefab,
+            dangerZonePrefabScale,
+            dangerZonePrefabRotation);
+        dangerZones = ClampDangerZones(dangerZonePositions);
+        pathPointRenderer.Draw(startPoint, endPoints, dangerZones);
+        pathLineRenderer = new TetrisPathLineRenderer(
+            board,
+            plane,
+            pathLineColor,
+            pathLineThickness,
+            pathLineHeightOffset,
+            pathLineEffectPrefab);
+        pathRules = new TetrisPathRules(board, boardWidth, boardDepth, startPoint, endPoints, dangerZones);
+        EvaluatePath();
+    }
+
+    private Vector2Int[] ClampPathPoints(Vector2Int[] positions)
+    {
+        if (positions == null || positions.Length == 0)
+        {
+            return new[] { ClampToPathPointArea(pathStartPoint + Vector2Int.up) };
+        }
+
+        Vector2Int[] clamped = new Vector2Int[positions.Length];
+        for (int i = 0; i < positions.Length; i++)
+        {
+            clamped[i] = ClampToPathPointArea(positions[i]);
+        }
+
+        return clamped;
+    }
+
+    private void EvaluatePath()
+    {
+        pathResult = pathRules?.Evaluate();
+        pathLineRenderer?.Draw(pathResult);
+        if (pathResult == null)
+        {
+            return;
+        }
+
+        if (pathResult.ReachedDangerZone)
+        {
+            gameOver = true;
+            ghost?.Hide();
+            return;
+        }
+
+        if (pathResult.ReachedEndPoint)
+        {
+            TriggerGameClear();
+        }
+    }
+
+    private void TriggerGameClear()
+    {
+        if (gameOver || gameClear)
+        {
+            return;
+        }
+
+        gameClear = true;
+        if (!loadingNextStage && stagePresentation != null)
+        {
+            loadingNextStage = true;
+            StartCoroutine(stagePresentation.LoadNextStageAfterDelay(nextStageSceneName, nextStageDelay));
+        }
+    }
+
+    private Vector2Int ClampToPathPointArea(Vector2Int position)
+    {
+        return new Vector2Int(
+            Mathf.Clamp(position.x, -1, boardWidth),
+            Mathf.Clamp(position.y, -1, boardDepth));
+    }
+
+    private Vector2Int[] ClampDangerZones(Vector2Int[] positions)
+    {
+        Vector2Int[] clamped = new Vector2Int[positions.Length];
+        for (int i = 0; i < positions.Length; i++)
+        {
+            clamped[i] = new Vector2Int(
+                Mathf.Clamp(positions[i].x, 0, boardWidth - 1),
+                Mathf.Clamp(positions[i].y, 0, boardDepth - 1));
+        }
+
+        return clamped;
+    }
+
+    private void UpdatePieceView()
+    {
+        activePiece.Root.transform.position = board.CellToWorld(activePiece.Position);
+        activePiece.Root.transform.rotation = plane.rotation * Quaternion.Euler(0f, activePiece.Rotation * 90f, 0f);
+        orderLabelRenderer?.Refresh();
+        UpdateGhost();
+    }
+
+    private void UpdateGhost()
+    {
+        if (ghost != null && activePiece != null)
+        {
+            ghost.Update(board, CurrentData, activePiece, plane);
+        }
+    }
+
+    private TetrominoData CurrentData => tetrominoes[activePiece.Type];
+
+    private static int GetLineScore(int lines)
+    {
+        return lines switch { 1 => 100, 2 => 300, 3 => 500, 4 => 800, _ => 0 };
+    }
+
+    private void RestartScene()
+    {
+        Scene currentScene = SceneManager.GetActiveScene();
+        SceneManager.LoadScene(currentScene.name);
+    }
+
+    private void OnDestroy()
+    {
+        ghost?.Destroy();
+        orderLabelRenderer?.Destroy();
+        pathPointRenderer?.Destroy();
+        pathLineRenderer?.Destroy();
+        stagePresentation?.Destroy();
+    }
+
+    private void OnGUI()
+    {
+        Matrix4x4 previousMatrix = GUI.matrix;
+        GUI.matrix = GetScaledGuiMatrix();
+        try
+        {
+            DrawHudGui();
+            DrawHoldAndPreviewGui();
+            DrawGimmickWarnings();
+            DrawStageClearGui();
+            DrawGameOverGui();
+        }
+        finally
+        {
+            GUI.matrix = previousMatrix;
+        }
+    }
+
+    private void DrawGameOverGui()
+    {
+        if (!gameOver)
+        {
+            return;
+        }
+
+        GUIStyle gameOverStyle = new GUIStyle(GUI.skin.label)
+        {
+            fontSize = gameOverFontSize,
+            alignment = TextAnchor.MiddleCenter,
+            normal = { textColor = Color.white }
+        };
+        GUI.Label(new Rect(0, GetGuiHeight() * 0.5f - gameOverHeight * 0.5f, GetGuiWidth(), gameOverHeight), $"GAME OVER\nPress {restartKey} to Restart", gameOverStyle);
+    }
+
+    private void DrawStageClearGui()
+    {
+        if (!gameClear)
+        {
+            return;
+        }
+
+        GUIStyle stageClearStyle = new GUIStyle(GUI.skin.label)
+        {
+            fontSize = gameOverFontSize,
+            alignment = TextAnchor.MiddleCenter,
+            normal = { textColor = Color.white }
+        };
+        GUI.Label(new Rect(0, GetGuiHeight() * 0.5f - gameOverHeight * 0.5f, GetGuiWidth(), gameOverHeight), "STAGE CLEAR", stageClearStyle);
+    }
+
+    private void DrawHudGui()
+    {
+        GUIStyle hudStyle = new GUIStyle(GUI.skin.label)
+        {
+            fontSize = hudFontSize,
+            normal = { textColor = Color.white }
+        };
+
+        float y = hudPosition.y;
+        GUI.Label(new Rect(hudPosition.x, y, hudLineSize.x, hudLineSize.y), $"Score: {score}  Lines: {clearedLines}", hudStyle);
+        y += hudLineSpacing;
+
+        if (pathResult != null)
+        {
+            GUI.Label(new Rect(hudPosition.x, y, hudLineSize.x, hudLineSize.y), $"Path: {pathResult.ReachableCells.Count} cells", hudStyle);
+            y += hudLineSpacing;
+        }
+    }
+
+    private static Matrix4x4 GetScaledGuiMatrix()
+    {
+        return Matrix4x4.TRS(Vector3.zero, Quaternion.identity, new Vector3(GetGuiScale(), GetGuiScale(), 1f));
+    }
+
+    private static float GetGuiScale()
+    {
+        return Mathf.Min(Screen.width / GuiReferenceWidth, Screen.height / GuiReferenceHeight);
+    }
+
+    private static float GetGuiWidth()
+    {
+        return Screen.width / GetGuiScale();
+    }
+
+    private static float GetGuiHeight()
+    {
+        return Screen.height / GetGuiScale();
+    }
+
+    private void DrawGimmickWarnings()
+    {
+        if (gameOver || gameClear)
+        {
+            return;
+        }
+
+        float y = GetGuiHeight() * 0.5f + warningCenterOffset.y - warningLineHeight;
+        if (ShouldShowGimmickWarning(enableGimmick1, gimmick1SpawnInterval))
+        {
+            DrawGimmickWarning("HORIZONTAL SHOCK DETECTED", y);
+            y += warningSpacing;
+        }
+
+        if (ShouldShowGimmickWarning(enableGimmick2, gimmick2SpawnInterval))
+        {
+            DrawGimmickWarning("VERTICAL SHOCK DETECTED", y);
+        }
+    }
+
+    private bool ShouldShowGimmickWarning(bool enabled, int interval)
+    {
+        if (!enabled || spawnedPieceCount <= 0)
+        {
+            return false;
+        }
+
+        int remainingSpawns = interval - spawnedPieceCount % interval;
+        return remainingSpawns > 0 && remainingSpawns <= gimmickWarningSpawnLead;
+    }
+
+    private void DrawGimmickWarning(string message, float y)
+    {
+        float alpha = Mathf.Lerp(0.2f, 0.85f, (Mathf.Sin(Time.time * gimmickWarningBlinkSpeed) + 1f) * 0.5f);
+        Color previousColor = GUI.color;
+        GUI.color = new Color(1f, 0.18f, 0.08f, alpha);
+
+        GUIStyle warningStyle = new GUIStyle(GUI.skin.label)
+        {
+            fontSize = warningFontSize,
+            alignment = TextAnchor.MiddleCenter,
+            fontStyle = FontStyle.Bold,
+            normal = { textColor = GUI.color }
+        };
+
+        GUI.Label(new Rect(warningCenterOffset.x, y, GetGuiWidth() - warningCenterOffset.x * 2f, warningLineHeight), message, warningStyle);
+        GUI.color = previousColor;
+    }
+
+    private void DrawHoldAndPreviewGui()
+    {
+        if (tetrominoes == null || sevenBag == null)
+        {
+            return;
+        }
+
+        float x = GetGuiWidth() - holdPreviewPanelWidth - holdPreviewPosition.x;
+        float y = holdPreviewPosition.y;
+
+        GUIStyle labelStyle = new GUIStyle(GUI.skin.label)
+        {
+            fontSize = holdPreviewFontSize,
+            normal = { textColor = Color.white }
+        };
+
+        GUI.Label(new Rect(x, y, holdPreviewPanelWidth, holdPreviewLabelHeight), $"HOLD ({holdKey})", labelStyle);
+        DrawPiecePreview(holdPieceType, x + 12f, y + holdPreviewLabelHeight + holdPreviewLabelGap, holdPreviewCellSize, holdPreviewPanelHeight);
+
+        float nextY = y + holdPreviewSectionSpacing;
+        GUI.Label(new Rect(x, nextY, holdPreviewPanelWidth, holdPreviewLabelHeight), "NEXT", labelStyle);
+        float nextPreviewY = nextY + holdPreviewLabelHeight + holdPreviewLabelGap;
+        DrawPiecePreview(sevenBag.Peek(0), x + 12f, nextPreviewY, nextPreviewCellSize, nextPreviewPanelHeight);
+        DrawPiecePreview(sevenBag.Peek(1), x + 12f, nextPreviewY + nextPreviewSpacing, nextPreviewCellSize, nextPreviewPanelHeight);
+    }
+
+    private void DrawPiecePreview(int type, float x, float y, float cellSize, float panelHeight)
+    {
+        if (type < 0 || type >= tetrominoes.Length)
+        {
+            GUI.Label(new Rect(x, y + cellSize, holdPreviewPanelWidth, cellSize), "Empty");
+            return;
+        }
+
+        TetrominoData data = tetrominoes[type];
+        GetPieceBounds(data, out int minX, out int maxX, out int minY, out int maxY);
+
+        float width = (maxX - minX + 1) * cellSize;
+        float height = (maxY - minY + 1) * cellSize;
+        float previewWidth = holdPreviewPanelWidth - 24f;
+        float previewHeight = panelHeight;
+        float offsetX = (previewWidth - width) * 0.5f;
+        float offsetY = (previewHeight - height) * 0.5f;
+
+        Color previousColor = GUI.color;
+        GUI.color = GetPreviewColor(type);
+
+        foreach (Vector2Int cell in data.Cells)
+        {
+            float drawX = x + offsetX + (cell.x - minX) * cellSize;
+            float drawY = y + offsetY + (maxY - cell.y) * cellSize;
+            GUI.DrawTexture(new Rect(drawX, drawY, cellSize - 2f, cellSize - 2f), Texture2D.whiteTexture);
+        }
+
+        GUI.color = previousColor;
+    }
+
+    private static void GetPieceBounds(TetrominoData data, out int minX, out int maxX, out int minY, out int maxY)
+    {
+        minX = int.MaxValue;
+        maxX = int.MinValue;
+        minY = int.MaxValue;
+        maxY = int.MinValue;
+
+        foreach (Vector2Int cell in data.Cells)
+        {
+            minX = Mathf.Min(minX, cell.x);
+            maxX = Mathf.Max(maxX, cell.x);
+            minY = Mathf.Min(minY, cell.y);
+            maxY = Mathf.Max(maxY, cell.y);
+        }
+    }
+
+    private static Color GetPreviewColor(int type)
+    {
+        return type switch
+        {
+            0 => Color.cyan,
+            1 => Color.yellow,
+            2 => new Color(0.65f, 0.2f, 1f),
+            3 => Color.green,
+            4 => Color.red,
+            5 => Color.blue,
+            6 => new Color(1f, 0.55f, 0f),
+            _ => Color.white
+        };
+    }
+}
