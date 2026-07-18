@@ -31,6 +31,15 @@ public class Game2Tetris : MonoBehaviour
     [SerializeField, Min(0.05f)] private float fallInterval = 0.7f;
     [SerializeField, Min(0.01f)] private float softDropInterval = 0.05f;
 
+    [Header("Garbage Lines")]
+    [SerializeField] private bool enableGarbageLines = true;
+    [SerializeField] private GameObject garbageBlockPrefab;
+    [SerializeField] private Color garbageBlockColor = Color.gray;
+    [SerializeField, Min(0)] private int initialGarbageLines = 4;
+    [SerializeField, Min(1)] private int garbageLinesPerRise = 4;
+    [SerializeField, Min(1)] private int garbageRowsPerHoleColumn = 2;
+    [SerializeField, Min(0.1f)] private float garbageRiseInterval = 30f;
+
     [Header("Controls")]
     [SerializeField] private Key moveLeftKey = Key.LeftArrow;
     [SerializeField] private Key moveRightKey = Key.RightArrow;
@@ -105,6 +114,7 @@ public class Game2Tetris : MonoBehaviour
     private TetrisPathLineRenderer pathLineRenderer;
     private TetrisPathRules pathRules;
     private TetrisPathResult pathResult;
+    private TetrisGarbageLineManager garbageLineManager;
     private Vector2Int[] dangerZones;
     private Game2StagePresentation stagePresentation;
     private SevenBag sevenBag;
@@ -135,6 +145,7 @@ public class Game2Tetris : MonoBehaviour
         AlignCameraToBoard();
         ghost = new TetrisGhost(ghostColor, ghostBehindOffset);
         orderLabelRenderer = new TetrisOrderLabelRenderer(orderLabelColor, orderLabelSize, orderLabelHeightOffset);
+        SetupGarbageLines();
         SetupPath();
         stagePresentation = new Game2StagePresentation(
             transform,
@@ -196,6 +207,7 @@ public class Game2Tetris : MonoBehaviour
 
         HandleInput(keyboard);
         HandleAutomaticFall(keyboard);
+        HandleGarbageRise();
     }
 
     private void HandleInput(Keyboard keyboard)
@@ -236,6 +248,34 @@ public class Game2Tetris : MonoBehaviour
         }
 
         nextFallTime = Time.time + interval;
+    }
+
+    private void HandleGarbageRise()
+    {
+        if (garbageLineManager == null)
+        {
+            return;
+        }
+
+        if (!garbageLineManager.Tick(out bool addedLines))
+        {
+            gameOver = true;
+            ghost?.Hide();
+            return;
+        }
+
+        if (addedLines)
+        {
+            if (activePiece != null && !board.IsValid(CurrentData, activePiece.Position, activePiece.Rotation))
+            {
+                gameOver = true;
+                ghost?.Hide();
+                return;
+            }
+
+            EvaluatePath();
+            UpdateGhost();
+        }
     }
 
     private bool ValidateSetup()
@@ -401,6 +441,28 @@ public class Game2Tetris : MonoBehaviour
         }
 
         SpawnPiece();
+    }
+
+    private void SetupGarbageLines()
+    {
+        if (!enableGarbageLines)
+        {
+            garbageLineManager = null;
+            return;
+        }
+
+        garbageLineManager = new TetrisGarbageLineManager(
+            board,
+            garbageBlockPrefab,
+            garbageBlockColor,
+            garbageLinesPerRise,
+            garbageRiseInterval,
+            garbageRowsPerHoleColumn);
+
+        if (!garbageLineManager.AddInitialLines(initialGarbageLines))
+        {
+            gameOver = true;
+        }
     }
 
     private void SetupPath()

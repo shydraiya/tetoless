@@ -22,6 +22,9 @@ public sealed class TetrisBoard
         settledRoot = new GameObject("Settled Blocks").transform;
     }
 
+    public int Width => width;
+    public int Depth => depth;
+
     public bool IsValid(TetrominoData data, Vector2Int position, int rotation)
     {
         foreach (Vector2Int source in data.Cells)
@@ -83,6 +86,67 @@ public sealed class TetrisBoard
         }
 
         return cleared;
+    }
+
+    public bool AddGarbageLines(int lineCount, int[] holeColumns, Func<Vector2Int, Transform> createBlock, int blockId, int order)
+    {
+        lineCount = Mathf.Clamp(lineCount, 0, depth);
+        if (lineCount == 0 || createBlock == null || holeColumns == null || holeColumns.Length == 0)
+        {
+            return true;
+        }
+
+        for (int y = depth - lineCount; y < depth; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                if (cells[x, y].IsOccupied)
+                {
+                    return false;
+                }
+            }
+        }
+
+        for (int y = depth - lineCount - 1; y >= 0; y--)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                TetrisBoardCell cell = cells[x, y];
+                cells[x, y + lineCount] = cell;
+                cells[x, y] = default;
+                if (cell.IsOccupied)
+                {
+                    cell.View.position = CellToWorld(new Vector2Int(x, y + lineCount));
+                }
+            }
+        }
+
+        for (int y = 0; y < lineCount; y++)
+        {
+            int holeColumn = Mathf.Clamp(holeColumns[Mathf.Min(y, holeColumns.Length - 1)], 0, width - 1);
+            for (int x = 0; x < width; x++)
+            {
+                if (x == holeColumn)
+                {
+                    continue;
+                }
+
+                Vector2Int position = new Vector2Int(x, y);
+                Transform block = createBlock(position);
+                if (block == null)
+                {
+                    continue;
+                }
+
+                block.SetParent(settledRoot, true);
+                block.position = CellToWorld(position);
+                block.rotation = plane.rotation;
+                block.localScale = Vector3.one * cellSize;
+                cells[x, y] = new TetrisBoardCell(block, blockId, order);
+            }
+        }
+
+        return true;
     }
 
     public Vector3 CellToWorld(Vector2Int cell)
