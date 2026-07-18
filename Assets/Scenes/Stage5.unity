@@ -591,12 +591,20 @@ MonoBehaviour:
   blockL: {fileID: 1694872878340393729, guid: d9d41b9adb9569048a92cef2ee9265e0, type: 3}
   fallInterval: 0.7
   softDropInterval: 0.05
+  enableGarbageLines: 1
+  garbageBlockPrefab: {fileID: 0}
+  garbageBlockColor: {r: 0.2971698, g: 0.2971698, b: 0.2971698, a: 1}
+  initialGarbageLines: 4
+  garbageLinesPerRise: 4
+  garbageRiseInterval: 60
   moveLeftKey: 61
   moveRightKey: 62
   softDropKey: 64
   hardDropKey: 1
   clockwiseKey: 38
   counterClockwiseKey: 40
+  debugStageClearKey: 4
+  restartKey: 32
   ghostColor: {r: 1, g: 1, b: 1, a: 0.25}
   ghostBehindOffset: 0.05
   showOrderLabels: 1
@@ -605,10 +613,10 @@ MonoBehaviour:
   orderLabelHeightOffset: 0.55
   pathStartPoint: {x: 5, y: -1}
   pathEndPoints:
-  - {x: 1, y: 17}
-  - {x: 4, y: 16}
-  - {x: 6, y: 16}
-  - {x: 8, y: 17}
+  - {x: 1, y: 14}
+  - {x: 4, y: 13}
+  - {x: 6, y: 13}
+  - {x: 8, y: 14}
   pathStartColor: {r: 0, g: 0, b: 1, a: 1}
   pathEndColor: {r: 0, g: 1, b: 0, a: 1}
   dangerZoneColor: {r: 1, g: 0, b: 0, a: 0.2784314}
@@ -622,13 +630,13 @@ MonoBehaviour:
   pathLineHeightOffset: 2
   pathLineEffectPrefab: {fileID: 178460, guid: 2736bbc2f2c78a949957b0719c2992bd, type: 3}
   dangerZonePositions:
-  - {x: 2, y: 8}
-  - {x: 3, y: 9}
-  - {x: 4, y: 10}
-  - {x: 5, y: 11}
-  - {x: 6, y: 12}
-  - {x: 7, y: 13}
-  - {x: 5, y: 15}
+  - {x: 2, y: 4}
+  - {x: 3, y: 5}
+  - {x: 4, y: 6}
+  - {x: 5, y: 7}
+  - {x: 6, y: 8}
+  - {x: 7, y: 9}
+  - {x: 5, y: 10}
   playMapIntro: 1
   mapIntroInterval: 1
   mapRevealEffectPrefab: {fileID: 100004, guid: b46890100828db6429ff69c322b45893, type: 3}
