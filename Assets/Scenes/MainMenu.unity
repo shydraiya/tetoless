@@ -391,7 +391,7 @@ RectTransform:
   m_Father: {fileID: 974455538}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 0, y: 0}
+  m_AnchorMax: {x: 1, y: 1}
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 10, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
@@ -531,7 +531,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &107060578
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -727,7 +727,7 @@ RectTransform:
   m_Father: {fileID: 786149527}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 0, y: 0}
+  m_AnchorMax: {x: 1, y: 1}
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 10, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
@@ -1534,7 +1534,7 @@ MonoBehaviour:
   effectSource: {fileID: 0}
   bgmClip: {fileID: 8300000, guid: 67344956e777031459c75f196ece03db, type: 3}
   effectClip: {fileID: 0}
-  bgmVolume: 10
+  bgmVolume: 1
   effectVolume: 10
 --- !u!4 &554953309
 Transform:
@@ -3853,7 +3853,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e2527a3c267911a479e9e1fea9528628, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::KeyBindingMenu
-  settingsPanel: {fileID: 811521452}
+  settingsPanel: {fileID: 0}
   holdKeyText: {fileID: 1609822573}
   clockwiseKeyText: {fileID: 418978582}
   counterClockwiseKeyText: {fileID: 1397434597}
@@ -4636,8 +4636,8 @@ RectTransform:
   m_Children: []
   m_Father: {fileID: 2146621139}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 0, y: 0}
+  m_AnchorMin: {x: 1, y: 0}
+  m_AnchorMax: {x: 1, y: 1}
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 20, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
@@ -4850,8 +4850,8 @@ RectTransform:
   m_Children: []
   m_Father: {fileID: 321003834}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 0, y: 0}
+  m_AnchorMin: {x: 1, y: 0}
+  m_AnchorMax: {x: 1, y: 1}
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 20, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}

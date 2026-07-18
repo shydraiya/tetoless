@@ -156,9 +156,9 @@ public sealed class KeyBindingMenu : MonoBehaviour
 
     private void RefreshLabels()
     {
-        if (holdKeyText != null) holdKeyText.text = $"Store: {holdKey}";
-        if (clockwiseKeyText != null) clockwiseKeyText.text = $"Rotate CW: {clockwiseKey}";
-        if (counterClockwiseKeyText != null) counterClockwiseKeyText.text = $"Rotate CCW: {counterClockwiseKey}";
+        if (holdKeyText != null) holdKeyText.text = $"{holdKey}";
+        if (clockwiseKeyText != null) clockwiseKeyText.text = $"{clockwiseKey}";
+        if (counterClockwiseKeyText != null) counterClockwiseKeyText.text = $"{counterClockwiseKey}";
     }
 
     private void SetStatus(string message)
