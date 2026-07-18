@@ -1,65 +1,14 @@
-using System.Collections;
 using UnityEngine;
-using UnityEngine.InputSystem;
-using UnityEngine.SceneManagement;
 
 public class TitleScreen : MonoBehaviour
 {
-    [SerializeField] private string gameSceneName = "Game";
     [SerializeField] private GameObject backgroundPrefab;
     [SerializeField] private string titleText = "TETOLESS";
     [SerializeField] private string promptText = "PRESS ANY KEY TO START";
-    [SerializeField] private bool useTransitionEffect;
-    [SerializeField, Min(0.05f)] private float fadeDuration = 0.45f;
-    [SerializeField, Min(0)] private int flashCount = 2;
-    [SerializeField, Min(0.02f)] private float flashDuration = 0.08f;
-
-    private float overlayAlpha;
-    private bool isTransitioning;
 
     private void Start()
     {
         SetupBackground();
-    }
-
-    private void Update()
-    {
-        if (isTransitioning || Keyboard.current == null || !Keyboard.current.anyKey.wasPressedThisFrame)
-        {
-            return;
-        }
-
-        if (useTransitionEffect)
-        {
-            StartCoroutine(PlayTransitionThenLoad());
-            return;
-        }
-
-        SceneManager.LoadScene(gameSceneName);
-    }
-
-    private IEnumerator PlayTransitionThenLoad()
-    {
-        isTransitioning = true;
-
-        float elapsed = 0f;
-        while (elapsed < fadeDuration)
-        {
-            elapsed += Time.deltaTime;
-            overlayAlpha = Mathf.Clamp01(elapsed / fadeDuration);
-            yield return null;
-        }
-
-        for (int i = 0; i < flashCount; i++)
-        {
-            overlayAlpha = 0f;
-            yield return new WaitForSeconds(flashDuration);
-            overlayAlpha = 1f;
-            yield return new WaitForSeconds(flashDuration);
-        }
-
-        overlayAlpha = 1f;
-        SceneManager.LoadScene(gameSceneName);
     }
 
     private void SetupBackground()
@@ -107,15 +56,5 @@ public class TitleScreen : MonoBehaviour
 
         GUI.Label(new Rect(0, Screen.height * 0.36f - 60f, Screen.width, 120f), titleText, titleStyle);
         GUI.Label(new Rect(0, Screen.height * 0.62f - 30f, Screen.width, 60f), promptText, promptStyle);
-
-        if (overlayAlpha <= 0f)
-        {
-            return;
-        }
-
-        Color previousColor = GUI.color;
-        GUI.color = new Color(0f, 0f, 0f, overlayAlpha);
-        GUI.DrawTexture(new Rect(0, 0, Screen.width, Screen.height), Texture2D.whiteTexture);
-        GUI.color = previousColor;
     }
 }
